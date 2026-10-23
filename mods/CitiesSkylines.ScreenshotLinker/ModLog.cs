@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 
 namespace CitiesSkylines.ScreenshotLinker
 {
@@ -20,23 +21,29 @@ namespace CitiesSkylines.ScreenshotLinker
 
         private static void Write(string level, string msg)
         {
+            // 注意：不能用 lock 语句（net46 编译生成 Monitor.Enter(object) 单参重载，
+            // 游戏 Mono 的 .NET 3.5 API 只有 Monitor.Enter(object, ref bool)，运行时会
+            // MissingMethodException）→ 显式双参数写法
+            bool lockTaken = false;
             try
             {
-                lock (Sync)
+                Monitor.Enter(Sync, ref lockTaken);
+                if (_logPath == null)
                 {
-                    if (_logPath == null)
-                    {
-                        string dllDir = Path.GetDirectoryName(
-                            new Uri(typeof(ModLog).Assembly.CodeBase).LocalPath);
-                        _logPath = Path.Combine(dllDir ?? ".", "ScreenshotLinker.log");
-                    }
-                    File.AppendAllText(_logPath, string.Format("{0:yyyy-MM-dd HH:mm:ss} [{1}] {2}{3}",
-                        DateTime.Now, level, msg, Environment.NewLine));
+                    string dllDir = Path.GetDirectoryName(
+                        new Uri(typeof(ModLog).Assembly.CodeBase).LocalPath);
+                    _logPath = Path.Combine(dllDir ?? ".", "ScreenshotLinker.log");
                 }
+                File.AppendAllText(_logPath, string.Format("{0:yyyy-MM-dd HH:mm:ss} [{1}] {2}{3}",
+                    DateTime.Now, level, msg, Environment.NewLine));
             }
             catch
             {
                 // 日志失败不影响主流程
+            }
+            finally
+            {
+                if (lockTaken) Monitor.Exit(Sync);
             }
         }
     }

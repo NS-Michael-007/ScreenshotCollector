@@ -30,10 +30,16 @@ namespace CitiesSkylines.ScreenshotLinker
 
         public void Start()
         {
-            lock (_lock)
+            bool lockTaken = false;
+            try
             {
+                Monitor.Enter(_lock, ref lockTaken);
                 if (_started) return;
                 _started = true;
+            }
+            finally
+            {
+                if (lockTaken) Monitor.Exit(_lock);
             }
 
             // 监听两个截图目录（分类对应桌面端归档分类）
@@ -46,15 +52,29 @@ namespace CitiesSkylines.ScreenshotLinker
 
         public void Stop()
         {
-            lock (_lock)
+            bool lockTaken = false;
+            try
             {
+                Monitor.Enter(_lock, ref lockTaken);
                 _started = false;
             }
-            if (_retryTimer != null) { _retryTimer.Dispose(); _retryTimer = null; }
-            lock (_lock)
+            finally
             {
+                if (lockTaken) Monitor.Exit(_lock);
+            }
+
+            if (_retryTimer != null) { _retryTimer.Dispose(); _retryTimer = null; }
+
+            lockTaken = false;
+            try
+            {
+                Monitor.Enter(_lock, ref lockTaken);
                 foreach (var w in _watchers) { try { w.Dispose(); } catch { } }
                 _watchers.Clear();
+            }
+            finally
+            {
+                if (lockTaken) Monitor.Exit(_lock);
             }
         }
 
@@ -76,8 +96,10 @@ namespace CitiesSkylines.ScreenshotLinker
                     ModLog.Info("目录尚未创建，等待重试：" + dir);
                     return;
                 }
-                lock (_lock)
+                bool lockTaken = false;
+                try
                 {
+                    Monitor.Enter(_lock, ref lockTaken);
                     // 已监听则不重复
                     foreach (var w in _watchers)
                     {
@@ -95,6 +117,10 @@ namespace CitiesSkylines.ScreenshotLinker
                     watcher.EnableRaisingEvents = true;
                     _watchers.Add(watcher);
                     ModLog.Info("已监听：" + dir + "（分类：" + category + "）");
+                }
+                finally
+                {
+                    if (lockTaken) Monitor.Exit(_lock);
                 }
             }
             catch (Exception ex)
