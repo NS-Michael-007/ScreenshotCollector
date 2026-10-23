@@ -37,9 +37,9 @@ namespace CitiesSkylines.ScreenshotLinker
 
         private static string ConfigPath()
         {
-            string dllDir = Path.GetDirectoryName(
+            string dllDir = PathUtil.DirName(
                 new Uri(typeof(ScreenshotLinkerConfig).Assembly.CodeBase).LocalPath);
-            return Path.Combine(dllDir ?? ".", "ScreenshotLinkerConfig.xml");
+            return PathUtil.Join(dllDir, "ScreenshotLinkerConfig.xml");
         }
 
         public static ScreenshotLinkerConfig Load()

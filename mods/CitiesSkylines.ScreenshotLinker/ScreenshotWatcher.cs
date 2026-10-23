@@ -24,7 +24,9 @@ namespace CitiesSkylines.ScreenshotLinker
         /// <summary>游戏数据目录（Colossal Order\Cities_Skylines）</summary>
         private static string GameRoot()
         {
-            return Path.Combine(
+            // 注意：不能用 Path.Combine 三参重载（.NET 4.0 才有，游戏 Mono 会
+            // MissingMethodException），一律走手写 PathUtil.Join
+            return PathUtil.Join(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Colossal Order", "Cities_Skylines");
         }
@@ -62,7 +64,7 @@ namespace CitiesSkylines.ScreenshotLinker
         /// <summary>尝试监听一个目录；目录不存在时记录日志并等重试</summary>
         private void TryWatch(string subDir, string category)
         {
-            string dir = Path.Combine(GameRoot(), subDir);
+            string dir = PathUtil.Join(GameRoot(), subDir);
             try
             {
                 if (!Directory.Exists(dir))
@@ -74,8 +76,8 @@ namespace CitiesSkylines.ScreenshotLinker
                 // 若遍历中被 Stop 修改集合 → foreach 抛异常 → 外层 catch 兜底，不影响主流程。
                 foreach (var w in _watchers)
                 {
-                    if (string.Equals(w.Path.TrimEnd(Path.DirectorySeparatorChar),
-                                      dir.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(w.Path.TrimEnd('\\'),
+                                      dir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
                         return;
                 }
 
@@ -103,7 +105,7 @@ namespace CitiesSkylines.ScreenshotLinker
         {
             try
             {
-                string dir = Path.Combine(GameRoot(), category == "编辑器快照" ? "Snapshots" : "Screenshots");
+                string dir = PathUtil.Join(GameRoot(), category == "编辑器快照" ? "Snapshots" : "Screenshots");
                 if (!Directory.Exists(dir)) return;
 
                 var latest = new DirectoryInfo(dir)
