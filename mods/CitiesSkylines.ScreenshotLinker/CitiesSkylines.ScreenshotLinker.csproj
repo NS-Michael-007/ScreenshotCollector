@@ -5,9 +5,11 @@
     <LangVersion>7.3</LangVersion>
     <AssemblyName>CitiesSkylines.ScreenshotLinker</AssemblyName>
     <RootNamespace>CitiesSkylines.ScreenshotLinker</RootNamespace>
-    <!-- 输出到 bin\Debug 根（不带 net46 子目录，便于发布脚本直接取 DLL） -->
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <Deterministic>false</Deterministic>
+    <!-- 编译产物直接输出到游戏本地模组文件夹（dotnet build 即发布，无需复制）
+         ICities.dll 由游戏环境提供（Private=false 不复制）；0Harmony.dll 随包复制到此处 -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>$(LOCALAPPDATA)\Colossal Order\Cities_Skylines\Addons\Mods\CitiesSkylines.ScreenshotLinker\</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
