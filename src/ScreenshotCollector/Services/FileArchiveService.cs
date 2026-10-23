@@ -21,8 +21,11 @@ public class FileArchiveService
 
     private readonly HashSet<string> _seenHashes = new(); // 已见过的图片哈希（去重）
 
-    /// <summary>归档成功后触发（归档路径, 来源分类, 捕获时间）——用于把新截图实时显示到界面列表</summary>
-    public event Action<string, string, DateTime>? Archived;
+    /// <summary>
+    /// 归档成功后触发（来源原始路径, 归档路径, 来源分类, 捕获时间）——用于把新截图实时显示到界面列表。
+    /// 第一个参数为 null 时表示来源路径未知（保留兼容）。
+    /// </summary>
+    public event Action<string?, string, string, DateTime>? Archived;
 
     /// <summary>
     /// 归档一张图片。
@@ -62,8 +65,8 @@ public class FileArchiveService
 
             // 5. 复制图片（保留原文件，安全不破坏来源）
             File.Copy(sourcePath, dest);
-            LogService.Info("Archive", $"已归档：{dest}（来源 {sourceCategory}）");
-            Archived?.Invoke(dest, sourceCategory, capturedAt);
+            LogService.Info("Archive", $"已归档：{dest}（来源 {sourceCategory}，原始 {sourcePath}）");
+            Archived?.Invoke(sourcePath, dest, sourceCategory, capturedAt);
             return dest;
         }
         catch (Exception ex)

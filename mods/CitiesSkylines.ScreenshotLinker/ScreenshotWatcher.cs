@@ -37,7 +37,8 @@ namespace CitiesSkylines.ScreenshotLinker
 
             // 监听两个截图目录（分类对应桌面端归档分类）
             TryWatch("Screenshots", "天际线");
-            TryWatch("Snapshots", "编辑器快照");
+            // Snapshots 是 UUID 子目录结构（快照/缩略图/提示图 三个文件），须递归监听并按文件名分类
+            TryWatchCore("Snapshots", "编辑器快照", true, ClassifySnapshot);
 
             // 目录尚未创建时（如从未截图过），每 60 秒重试一次
             _retryTimer = new Timer(_ => RetryAll(), null, 60000, 60000);
@@ -58,11 +59,20 @@ namespace CitiesSkylines.ScreenshotLinker
             // 读取启动标志（CompareExchange 原值读法）
             if (Interlocked.CompareExchange(ref _startedFlag, 0, 0) == 0) return;
             TryWatch("Screenshots", "天际线");
-            TryWatch("Snapshots", "编辑器快照");
+            TryWatchCore("Snapshots", "编辑器快照", true, ClassifySnapshot);
         }
 
         /// <summary>尝试监听一个目录；目录不存在时记录日志并等重试</summary>
         private void TryWatch(string subDir, string category)
+        {
+            TryWatchCore(subDir, category, false, null);
+        }
+
+        /// <summary>
+        /// 核心监听逻辑。classifier 非空时按文件名细分分类（Snapshots 的缩略图/提示图），
+        /// 为空时一律用 defaultCategory（Screenshots 顶层平铺结构）。
+        /// </summary>
+        private void TryWatchCore(string subDir, string defaultCategory, bool recursive, Func<string, string> classifier)
         {
             string dir = PathUtil.Join(GameRoot(), subDir);
             try
@@ -83,18 +93,42 @@ namespace CitiesSkylines.ScreenshotLinker
 
                 var watcher = new FileSystemWatcher(dir)
                 {
-                    IncludeSubdirectories = false,
+                    IncludeSubdirectories = recursive,
                     Filter = "*.png"
                 };
-                watcher.Created += (s, e) => OnNewFile(e.FullPath, category);
+                watcher.Created += (s, e) => OnNewFile(
+                    e.FullPath,
+                    classifier != null ? classifier(e.FullPath) : defaultCategory);
                 watcher.EnableRaisingEvents = true;
                 _watchers.Add(watcher);
-                ModLog.Info("已监听：" + dir + "（分类：" + category + "）");
+                ModLog.Info("已监听：" + dir + "（分类：" + defaultCategory +
+                            (recursive ? "，含子目录" : "") + "）");
             }
             catch (Exception ex)
             {
                 ModLog.Error("监听失败 " + dir + "：" + ex.Message);
             }
+        }
+
+        /// <summary>
+        /// Snapshots 快照目录分类：游戏在 Snapshots\&lt;UUID&gt;\ 下同时生成
+        ///   snapshot.png（主图）→ 编辑器快照
+        ///   thumbnail.png（缩略图）→ 编辑器缩略图
+        ///   tooltip.png（提示图）→ 编辑器提示图
+        /// 按文件名前缀识别，其余归「编辑器快照」。
+        /// </summary>
+        private static string ClassifySnapshot(string path)
+        {
+            string fn = FileNameOf(path);
+            if (fn.StartsWith("thumbnail", StringComparison.OrdinalIgnoreCase)) return "编辑器缩略图";
+            if (fn.StartsWith("tooltip", StringComparison.OrdinalIgnoreCase)) return "编辑器提示图";
+            return "编辑器快照";
+        }
+
+        private static string FileNameOf(string path)
+        {
+            int i = path.LastIndexOf('\\');
+            return i >= 0 ? path.Substring(i + 1) : path;
         }
 
         /// <summary>

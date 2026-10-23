@@ -162,19 +162,52 @@ public partial class ScreenshotListViewModel : BaseViewModel
         }
     }
 
-    /// <summary>复制选中截图的完整路径到剪贴板</summary>
+    /// <summary>
+    /// 打开选中截图在来源目录（游戏内）的真实位置——如 Snapshots\&lt;UUID&gt;\snapshot.png。
+    /// 原始路径为空（历史归档项）或文件已被删除时给出提示，不静默失败。
+    /// </summary>
+    [RelayCommand]
+    private void OpenSourceLocation()
+    {
+        if (SelectedItem == null) return;
+        var path = SelectedItem.SourcePath;
+        if (string.IsNullOrEmpty(path))
+        {
+            LogService.Warn("UI", "该条目为历史归档项，未记录原始路径");
+            return;
+        }
+        if (!File.Exists(path))
+        {
+            LogService.Warn("UI", $"原始文件不存在（可能已在游戏内删除）：{path}");
+            return;
+        }
+        try
+        {
+            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{path}\"");
+            LogService.Info("UI", $"打开原始位置：{path}");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error("UI", $"打开原始位置失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>复制选中截图路径到剪贴板：优先复制原始路径（真实路径），无原始路径时复制归档路径</summary>
     [RelayCommand]
     private async Task CopyPath()
     {
         if (SelectedItem == null) return;
         try
         {
+            var copyPath = !string.IsNullOrEmpty(SelectedItem.SourcePath)
+                ? SelectedItem.SourcePath
+                : SelectedItem.FilePath;
             var clipboard = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)
                 ?.MainWindow?.Clipboard;
             if (clipboard != null)
             {
-                await clipboard.SetTextAsync(SelectedItem.FilePath);
-                LogService.Info("UI", $"已复制路径：{SelectedItem.FilePath}");
+                await clipboard.SetTextAsync(copyPath);
+                LogService.Info("UI", $"已复制路径：{copyPath}");
             }
         }
         catch (Exception ex)

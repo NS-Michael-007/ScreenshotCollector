@@ -25,6 +25,8 @@ public partial class MainViewModel : BaseViewModel
         new() { DisplayName = "\U0001F5BC 全部截图" },
         new() { DisplayName = "\U0001F3D9 天际线游戏截图", SourceLabel = "天际线" },
         new() { DisplayName = "\U0001F5FA 编辑器快照", SourceLabel = "编辑器快照" },
+        new() { DisplayName = "\U0001F4C1 编辑器缩略图", SourceLabel = "编辑器缩略图" },
+        new() { DisplayName = "\U0001F4A1 编辑器提示图", SourceLabel = "编辑器提示图" },
         new() { DisplayName = "\U0001F3AE Steam F12截图", SourceLabel = "Steam" },
         new() { DisplayName = "\U0001F4AC 微信截图", SourceLabel = "微信" },
         new() { DisplayName = "\U0001F9E9 QQ截图", SourceLabel = "QQ" },
@@ -148,16 +150,17 @@ public partial class MainViewModel : BaseViewModel
         };
 
         // 归档成功 → 实时添加到界面列表（截图后立刻出现在中间列表，无需重启）
-        Archive.Archived += (destPath, category, time) =>
+        Archive.Archived += (sourcePath, destPath, category, time) =>
         {
             Screenshots.Add(new ScreenshotItem
             {
                 FileName = System.IO.Path.GetFileName(destPath),
                 FilePath = destPath,
+                SourcePath = sourcePath ?? string.Empty,
                 SourceLabel = category,
                 CaptureTime = time
             });
-            LogService.Info("App", $"列表新增截图：{System.IO.Path.GetFileName(destPath)}（{category}）");
+            LogService.Info("App", $"列表新增截图：{System.IO.Path.GetFileName(destPath)}（{category}，原始 {sourcePath ?? "未知"}）");
         };
 
         // 文件夹监听：注册默认截图目录（天际线/编辑器快照/Steam），实时更新状态灯

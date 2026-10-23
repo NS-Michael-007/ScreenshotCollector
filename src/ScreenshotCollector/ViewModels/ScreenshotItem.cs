@@ -15,8 +15,14 @@ public class ScreenshotItem : BaseViewModel
     /// <summary>文件名，如 20261023_102211_WeChat.png</summary>
     public string FileName { get; init; } = string.Empty;
 
-    /// <summary>本地完整路径</summary>
+    /// <summary>本地完整路径（归档后的保存路径）</summary>
     public string FilePath { get; init; } = string.Empty;
+
+    /// <summary>
+    /// 来源原始路径（如游戏目录 Snapshots\&lt;UUID&gt;\snapshot.png）。
+    /// 归档时记录；启动时加载的历史归档项无法反推，为空字符串。
+    /// </summary>
+    public string SourcePath { get; init; } = string.Empty;
 
     /// <summary>捕获时间</summary>
     public DateTime CaptureTime { get; init; } = DateTime.Now;
@@ -29,6 +35,11 @@ public class ScreenshotItem : BaseViewModel
 
     /// <summary>捕获时间的显示文本</summary>
     public string CaptureTimeText => CaptureTime.ToString("yyyy-MM-dd HH:mm:ss");
+
+    /// <summary>原始路径的显示文本（无原始路径时给出说明，便于 UI 直接绑定）</summary>
+    public string SourcePathDisplay => string.IsNullOrEmpty(SourcePath)
+        ? "（历史归档项，未记录原始路径）"
+        : $"原始路径：{SourcePath}";
 
     private bool _isSelected;
 

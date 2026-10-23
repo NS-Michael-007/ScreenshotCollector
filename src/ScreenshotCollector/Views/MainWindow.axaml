@@ -421,21 +421,24 @@
                                            FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                 <TextBlock Text="{Binding Screenshots.SelectedItem.FilePath}"
                                            FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Screenshots.SelectedItem.SourcePathDisplay}"
+                                           FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Spacing="16">
                                     <TextBlock Text="{Binding Screenshots.SelectedItem.SourceLabel}"
                                                FontSize="12" Foreground="#0078D4"/>
                                     <TextBlock Text="{Binding Screenshots.SelectedItem.CaptureTimeText}"
                                                FontSize="12" Foreground="#6B7280"/>
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-                                    <Button Content="打开文件位置" Command="{Binding Screenshots.OpenFileLocationCommand}"/>
-                                    <Button Content="复制路径" Command="{Binding Screenshots.CopyPathCommand}"/>
-                                    <Button Content="删除" Command="{Binding Screenshots.DeleteCommand}"/>
-                                    <Button Content="&#x1F4E4; 分享到微信" Command="{Binding Screenshots.ShareToWeChatCommand}"
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button Content="打开文件位置" Margin="0,0,8,8" Command="{Binding Screenshots.OpenFileLocationCommand}"/>
+                                    <Button Content="打开原始位置" Margin="0,0,8,8" Command="{Binding Screenshots.OpenSourceLocationCommand}"/>
+                                    <Button Content="复制路径" Margin="0,0,8,8" Command="{Binding Screenshots.CopyPathCommand}"/>
+                                    <Button Content="删除" Margin="0,0,8,8" Command="{Binding Screenshots.DeleteCommand}"/>
+                                    <Button Content="&#x1F4E4; 分享到微信" Margin="0,0,8,8" Command="{Binding Screenshots.ShareToWeChatCommand}"
                                             Background="#07C160" Foreground="White"/>
-                                    <Button Content="&#x1F4E4; 分享到QQ" Command="{Binding Screenshots.ShareToQQCommand}"
+                                    <Button Content="&#x1F4E4; 分享到QQ" Margin="0,0,8,8" Command="{Binding Screenshots.ShareToQQCommand}"
                                             Background="#12B7F5" Foreground="White"/>
-                                </StackPanel>
+                                </WrapPanel>
                                 <TextBlock Text="分享：复制图片到剪贴板并唤起微信/QQ，在聊天输入框按 Ctrl+V 粘贴"
                                            FontSize="11" Foreground="#9CA3AF"/>
                             </StackPanel>

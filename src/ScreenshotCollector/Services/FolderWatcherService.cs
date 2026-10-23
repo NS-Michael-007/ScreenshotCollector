@@ -33,7 +33,8 @@ public class FolderWatcherService
         var csDir = Path.Combine(local, "Colossal Order", "Cities_Skylines");
 
         AddWatch(Path.Combine(csDir, "Screenshots"), "天际线");
-        AddWatch(Path.Combine(csDir, "Snapshots"), "编辑器快照");
+        // Snapshots 是 UUID 子目录结构（快照/缩略图/提示图），须递归监听并按文件名分类
+        AddSnapshotWatch(Path.Combine(csDir, "Snapshots"));
 
         var steamShot = FindSteamScreenshotsFolder();
         if (steamShot != null)
@@ -70,6 +71,42 @@ public class FolderWatcherService
 
         LogService.Info("FolderWatch", $"已监听：{folderPath}（{category}）");
         FolderStatusChanged?.Invoke(category, true, folderPath);
+    }
+
+    /// <summary>
+    /// 监听 Snapshots 快照目录（含 UUID 子目录）：
+    /// 游戏在 Snapshots\&lt;UUID&gt;\ 下同时生成 snapshot.png（主图）、thumbnail.png（缩略图）、
+    /// tooltip.png（提示图），按文件名前缀分到三个分类归档。
+    /// </summary>
+    public void AddSnapshotWatch(string folderPath)
+    {
+        if (!Directory.Exists(folderPath))
+        {
+            LogService.Info("FolderWatch", $"目录不存在，跳过监听：{folderPath}（编辑器快照）");
+            FolderStatusChanged?.Invoke("编辑器快照", false, folderPath);
+            return;
+        }
+
+        var watcher = new FileSystemWatcher(folderPath)
+        {
+            IncludeSubdirectories = true,
+            EnableRaisingEvents = true,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite
+        };
+        watcher.Created += (_, e) => OnCreatedAsync(e.FullPath, ClassifySnapshot(e.FullPath));
+        _watchers.Add(watcher);
+
+        LogService.Info("FolderWatch", $"已监听（含子目录）：{folderPath}（编辑器快照/缩略图/提示图）");
+        FolderStatusChanged?.Invoke("编辑器快照", true, folderPath);
+    }
+
+    /// <summary>按文件名前缀分类快照：thumbnail→缩略图，tooltip→提示图，其余→主图快照</summary>
+    private static string ClassifySnapshot(string path)
+    {
+        var name = Path.GetFileName(path);
+        if (name.StartsWith("thumbnail", StringComparison.OrdinalIgnoreCase)) return "编辑器缩略图";
+        if (name.StartsWith("tooltip", StringComparison.OrdinalIgnoreCase)) return "编辑器提示图";
+        return "编辑器快照";
     }
 
     /// <summary>新文件出现：等写入完成 → 归档图片</summary>
