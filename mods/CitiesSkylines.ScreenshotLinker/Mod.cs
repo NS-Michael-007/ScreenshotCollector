@@ -1,5 +1,5 @@
 using System;
-using Harmony;
+using HarmonyLib;
 using ICities;
 
 namespace CitiesSkylines.ScreenshotLinker
@@ -18,7 +18,7 @@ namespace CitiesSkylines.ScreenshotLinker
         public const string HarmonyId = "com.wangsiji.screenshotlinker";
 
         private ScreenshotWatcher _watcher;
-        private HarmonyInstance _harmony;
+        private Harmony _harmony;
         private bool _harmonyActive;
 
         /// <summary>游戏内模组名称（内容管理器中显示，独立存在）</summary>
@@ -137,7 +137,7 @@ namespace CitiesSkylines.ScreenshotLinker
         {
             try
             {
-                _harmony = HarmonyInstance.Create(HarmonyId);
+                _harmony = new Harmony(HarmonyId);
 
                 // 游戏截图管理器（天际线一代：Game.ScreenshotManager，程序集 Assembly-CSharp）
                 // 注意：游戏 Mono 环境为 .NET 3.5 API surface，`type == null` 会触发

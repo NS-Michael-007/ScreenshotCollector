@@ -23,9 +23,10 @@
       <HintPath>D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities_Data\Managed\ICities.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <!-- Harmony 框架（随模组包携带，与工坊 Harmony 模组同结构） -->
-    <Reference Include="0Harmony">
-      <HintPath>lib\0Harmony.dll</HintPath>
+    <!-- Harmony 2.x 框架（工坊 2040656402 同款：CitiesHarmony.Harmony.dll 2.0.4.0，含 HarmonyLib 命名空间；
+         随模组包携带，与工坊 Harmony 2 模组同结构；游戏已加载同名程序集时自动复用） -->
+    <Reference Include="CitiesHarmony.Harmony">
+      <HintPath>lib\CitiesHarmony.Harmony.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>
