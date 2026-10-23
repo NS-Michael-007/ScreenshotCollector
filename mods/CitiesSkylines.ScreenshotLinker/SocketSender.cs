@@ -13,7 +13,11 @@ namespace CitiesSkylines.ScreenshotLinker
     /// </summary>
     public static class SocketSender
     {
+        /// <summary>默认端口（模组启用时按配置覆盖）</summary>
         public const int DefaultPort = 23333;
+
+        /// <summary>实际使用的端口（Mod.OnEnabled 从配置读取）</summary>
+        public static int Port = DefaultPort;
 
         /// <summary>发送成功返回 true；桌面端未启动 / 网络异常返回 false（不抛异常）</summary>
         public static bool Send(string path, string category, string timeText)
@@ -29,7 +33,7 @@ namespace CitiesSkylines.ScreenshotLinker
                     // 2 秒连接超时，避免阻塞游戏；
                     // 用 BeginConnect/EndConnect（.NET 2.0 API）而非 ConnectAsync（.NET 4.5），
                     // 兼容游戏 Mono 的 .NET 3.5 API surface
-                    var result = client.BeginConnect("127.0.0.1", DefaultPort, null, null);
+                    var result = client.BeginConnect("127.0.0.1", Port, null, null);
                     if (!result.AsyncWaitHandle.WaitOne(2000))
                     {
                         client.Close();

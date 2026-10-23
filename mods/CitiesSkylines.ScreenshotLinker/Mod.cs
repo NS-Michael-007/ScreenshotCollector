@@ -10,6 +10,7 @@ namespace CitiesSkylines.ScreenshotLinker
     ///   1) Harmony 初始化并补丁游戏截图入口（反射探测，命中即即时推送）；
     ///   2) 目录监听兜底（无论补丁是否命中，截图落盘都能推送）。
     /// 游戏内 F12 截图 / 编辑器快照 → 本地 TCP 23333 推送到桌面端「截图自动收集器」。
+    /// 设置：OnSettingsUI(UIHelperBase) → 显示在游戏「选项 → Mods」页签。
     /// </summary>
     public class Mod : IUserMod
     {
@@ -20,25 +21,43 @@ namespace CitiesSkylines.ScreenshotLinker
         private HarmonyInstance _harmony;
         private bool _harmonyActive;
 
-        /// <summary>游戏内模组名称（内容管理器中显示）</summary>
+        /// <summary>游戏内模组名称（内容管理器中显示，独立存在）</summary>
         public string Name => "截图自动收集器联动（ScreenshotLinker）";
 
-        /// <summary>模组描述</summary>
-        public string Description =>
-            "把天际线 F12 截图与编辑器快照实时推送到桌面端「截图自动收集器」（TCP 23333），" +
-            "自动归档并点亮状态灯。基于 Harmony 框架（随包自带 0Harmony.dll），需配合桌面端软件使用。";
+        /// <summary>描述置空：内容管理器列表只保留模组名称，不显示描述块</summary>
+        public string Description => string.Empty;
 
-        /// <summary>模组启用：Harmony 补丁 + 目录监听双通道</summary>
+        /// <summary>模组启用：按配置加载配置并启动对应通道</summary>
         public void OnEnabled()
         {
-            // 通道1：Harmony 补丁游戏截图入口（反射探测，类名/方法名不硬编码）
-            _harmonyActive = TryPatchScreenshot();
+            ScreenshotLinkerConfig.EnsureLoaded();
+            var cfg = ScreenshotLinkerConfig.Current;
+            SocketSender.Port = cfg.Port;
 
-            // 通道2：目录监听兜底（保证任何情况下都能推送）
-            if (_watcher == null) _watcher = new ScreenshotWatcher();
-            _watcher.Start();
+            ModLog.Info("配置：端口=" + cfg.Port + "，Harmony补丁=" + cfg.UseHarmonyPatch + "，目录监听=" + cfg.UseFolderWatch);
 
-            ModLog.Info("模组已启用：Harmony " + (_harmonyActive ? "补丁成功" : "补丁未命中（目录监听兜底）"));
+            // 通道1：Harmony 补丁游戏截图入口（反射探测，类名/方法名不硬编码；可关闭）
+            if (cfg.UseHarmonyPatch)
+            {
+                _harmonyActive = TryPatchScreenshot();
+            }
+            else
+            {
+                ModLog.Info("已按设置关闭 Harmony 补丁通道");
+            }
+
+            // 通道2：目录监听兜底（保证任何情况下都能推送；可关闭）
+            if (cfg.UseFolderWatch)
+            {
+                if (_watcher == null) _watcher = new ScreenshotWatcher();
+                _watcher.Start();
+            }
+            else
+            {
+                ModLog.Info("已按设置关闭目录监听兜底通道");
+            }
+
+            ModLog.Info("模组已启用：Harmony " + (_harmonyActive ? "补丁成功" : "补丁未命中/关闭（目录监听兜底）"));
         }
 
         /// <summary>模组停用：卸载补丁 + 释放监听</summary>
@@ -54,6 +73,60 @@ namespace CitiesSkylines.ScreenshotLinker
                 ModLog.Error("卸载 Harmony 补丁失败：" + ex.Message);
             }
             ModLog.Info("模组已停用");
+        }
+
+        /// <summary>
+        /// 模组设置页：显示在游戏「选项 → Mods」页签。
+        /// 游戏通过反射查找 OnSettingsUI(UIHelperBase) 方法（鸭子类型，天际线一代标准做法）。
+        /// 设置修改即时写入 XML 配置。
+        /// </summary>
+        public void OnSettingsUI(UIHelperBase helper)
+        {
+            ScreenshotLinkerConfig.EnsureLoaded();
+            var cfg = ScreenshotLinkerConfig.Current;
+
+            helper.AddGroup("桌面端连接");
+            helper.AddTextfield(
+                "桌面端端口",
+                cfg.Port.ToString(),
+                text => { },
+                text =>
+                {
+                    int v;
+                    if (int.TryParse(text, out v) && v > 0 && v < 65536)
+                    {
+                        cfg.Port = v;
+                        cfg.Save();
+                        ModLog.Info("端口已更新为 " + v);
+                    }
+                    else
+                    {
+                        ModLog.Warn("端口无效：" + text);
+                    }
+                });
+
+            helper.AddGroup("捕获通道");
+            helper.AddCheckbox("启用 Harmony 补丁（截图瞬间即时推送）", cfg.UseHarmonyPatch,
+                isChecked =>
+                {
+                    cfg.UseHarmonyPatch = isChecked;
+                    cfg.Save();
+                    ModLog.Info("Harmony 补丁通道 " + (isChecked ? "已开启" : "已关闭") + "（重启模组生效）");
+                });
+            helper.AddCheckbox("启用目录监听兜底（任何情况都能推送）", cfg.UseFolderWatch,
+                isChecked =>
+                {
+                    cfg.UseFolderWatch = isChecked;
+                    cfg.Save();
+                    ModLog.Info("目录监听通道 " + (isChecked ? "已开启" : "已关闭") + "（重启模组生效）");
+                });
+
+            helper.AddSpace(8);
+            helper.AddButton("保存配置（重启模组生效）", () =>
+            {
+                cfg.Save();
+                ModLog.Info("已手动保存配置");
+            });
         }
 
         /// <summary>
