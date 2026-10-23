@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ScreenshotCollector</RootNamespace>
+    <AssemblyName>ScreenshotCollector</AssemblyName>
+    <!-- exe 程序图标：当前使用方案1（原图圆形）。切换方案2 改为 Assets\Brand\app_icon_text.ico -->
+    <ApplicationIcon>Assets\Brand\app_icon_pic.ico</ApplicationIcon>
+    <!-- 关闭编译绑定，使用反射绑定，方便初学者调试；后续可开启提升性能 -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <!-- 本项目为 Windows 桌面工具（注册表/托盘/Win32剪贴板），非 Windows 平台不发布 -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.4" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+  </ItemGroup>
+
+</Project>

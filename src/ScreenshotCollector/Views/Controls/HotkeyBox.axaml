@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="ScreenshotCollector.Views.Controls.HotkeyBox">
+
+    <!-- 快捷键录入框：点击进入录制态，按下组合键即完成替换，Esc 取消 -->
+    <Border x:Name="RootBorder"
+            Background="#F1F5F9"
+            CornerRadius="4"
+            BorderBrush="#E5E7EB"
+            BorderThickness="1"
+            Padding="8,4"
+            Focusable="True"
+            MinWidth="96">
+        <TextBlock x:Name="DisplayText" FontSize="12" Foreground="#334155"
+                   TextTrimming="CharacterEllipsis"/>
+    </Border>
+</UserControl>

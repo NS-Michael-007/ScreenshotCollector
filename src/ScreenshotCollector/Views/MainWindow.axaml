@@ -1,0 +1,448 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:ScreenshotCollector.ViewModels"
+        xmlns:controls="using:ScreenshotCollector.Views.Controls"
+        mc:Ignorable="d"
+        x:Class="ScreenshotCollector.Views.MainWindow"
+        Title="截图自动收集器"
+        Width="1100"
+        Height="700"
+        MinWidth="900"
+        MinHeight="560"
+        WindowStartupLocation="CenterScreen">
+
+    <!-- 数据上下文：全局根 ViewModel -->
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <!-- ========== 全局样式：QQ邮箱风格 ========== -->
+    <Window.Styles>
+        <!-- 左栏深色菜单项：默认浅色文字 -->
+        <Style Selector="ListBox#SideMenu ListBoxItem">
+            <Setter Property="Foreground" Value="#CBD5E1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+        <!-- 左栏菜单项：鼠标悬浮 -->
+        <Style Selector="ListBox#SideMenu ListBoxItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3D4B63"/>
+        </Style>
+        <!-- 左栏菜单项：选中高亮（QQ邮箱选中文件夹效果） -->
+        <Style Selector="ListBox#SideMenu ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="#475569"/>
+        </Style>
+        <Style Selector="ListBox#SideMenu ListBoxItem:selected">
+            <Setter Property="Foreground" Value="#FFFFFF"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- 中间截图列表条目：选中高亮（作用于分组内所有截图列表） -->
+        <Style Selector="ScrollViewer#ShotScroll ListBox ListBoxItem">
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="ScrollViewer#ShotScroll ListBox ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="#E8F0FE"/>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ==================== 顶部通栏（QQ邮箱深蓝头部） ==================== -->
+        <Border Grid.Row="0" Background="#44546A" Padding="12,0">
+            <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+
+                <!-- 左：Logo + 标题 -->
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="&#x1F5BC;" FontSize="20" VerticalAlignment="Center"/>
+                    <TextBlock Text="截图自动收集器" FontSize="16" FontWeight="SemiBold"
+                               Foreground="White" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- 中：搜索框（实时过滤截图列表） -->
+                <TextBox Grid.Column="1" Width="300" HorizontalAlignment="Center"
+                         Watermark="搜索截图文件名 / 来源 / 时间"
+                         Text="{Binding Screenshots.SearchText}"/>
+
+                <!-- 右：全局操作 -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
+                    <ToggleButton Content="暂停捕获" IsChecked="{Binding IsPaused}"
+                                  Foreground="White" Background="Transparent"/>
+                    <Button Content="打开目录" Foreground="White" Background="Transparent"
+                            Command="{Binding OpenSaveFolderCommand}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ==================== 主体三栏 ==================== -->
+        <Grid Grid.Row="1" ColumnDefinitions="180,*">
+
+            <!-- ========== 左栏：深色侧边菜单 ========== -->
+            <Border Grid.Column="0" Background="#334155">
+                <DockPanel>
+                    <!-- 底部固定操作区 -->
+                    <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="10,12">
+                        <!-- 🚥 服务状态指示灯：绿=监听中/已连接，黄=等待/待机，红=未找到/失败 -->
+                        <TextBlock Text="服务状态" FontSize="11" FontWeight="SemiBold" Foreground="#94A3B8"/>
+                        <ItemsControl ItemsSource="{Binding StatusItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ServiceStatusItem">
+                                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
+                                        <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4"
+                                                Background="{Binding StatusBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="11"
+                                                   Foreground="#CBD5E1" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" FontSize="11"
+                                                   Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Button Content="&#x25B6; 继续捕获" Background="#475569" Foreground="White"
+                                HorizontalAlignment="Stretch" Command="{Binding TogglePauseCommand}"/>
+                        <Button Content="&#x1F4C1; 打开保存目录" Background="Transparent" Foreground="#CBD5E1"
+                                HorizontalAlignment="Stretch" Command="{Binding OpenSaveFolderCommand}"/>
+                    </StackPanel>
+
+                    <!-- 菜单列表 -->
+                    <ListBox x:Name="SideMenu" Background="Transparent" BorderThickness="0"
+                             Margin="10,12"
+                             SelectedItem="{Binding SelectedMenu}"
+                             ItemsSource="{Binding MenuItems}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MenuItem">
+                                <TextBlock Text="{Binding DisplayName}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- ========== 中栏：截图列表（点「设置」时整栏隐藏，360px 左对齐） ========== -->
+            <Border Grid.Column="1" Background="#FFFFFF"
+                    Width="360" HorizontalAlignment="Left"
+                    BorderBrush="#E5E7EB" BorderThickness="0,0,1,0"
+                    IsVisible="{Binding IsListVisible}">
+                <Grid RowDefinitions="Auto,*">
+                    <!-- 列表标题 + 批量操作 -->
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="14,12,14,6">
+                        <TextBlock Grid.Column="0" Text="截图列表" FontSize="14" FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="全选" FontSize="11" Padding="10,4" Margin="0,0,6,0"
+                                Command="{Binding Screenshots.SelectAllCommand}"
+                                Background="#E0E7FF" Foreground="#4F46E5"/>
+                        <Button Grid.Column="2" Content="删除所选" FontSize="11" Padding="10,4"
+                                Command="{Binding Screenshots.DeleteSelectedCommand}"
+                                Background="#FEE2E2" Foreground="#EF4444"/>
+                    </Grid>
+
+                    <!-- 截图列表：按时间分组渲染（今天/昨天/本周/更早），组可折叠 -->
+                    <ScrollViewer x:Name="ShotScroll" Grid.Row="1" Padding="0,0,0,8">
+                        <StackPanel>
+                            <!-- 空列表引导 -->
+                            <StackPanel IsVisible="{Binding Screenshots.IsEmpty}" Margin="0,40,0,0" Spacing="6">
+                                <TextBlock Text="&#x1F4F7;" FontSize="36" HorizontalAlignment="Center" Foreground="#CBD5E1"/>
+                                <TextBlock Text="暂无截图" FontSize="13" HorizontalAlignment="Center" Foreground="#9CA3AF"/>
+                                <TextBlock Text="天际线 Shift+F12 / Steam F12 / 微信 Alt+A / QQ Ctrl+Alt+A 截图后自动出现在这里"
+                                           FontSize="11" HorizontalAlignment="Center" Foreground="#C4CCD6"/>
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding Screenshots.Groups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ScreenshotGroup">
+                                    <!-- 空组不显示组标题 -->
+                                    <StackPanel Margin="0,4" IsVisible="{Binding HasItems}">
+
+                                        <!-- 组标题（点击折叠/展开） -->
+                                        <ToggleButton Command="{Binding ToggleExpandCommand}"
+                                                      Background="Transparent" BorderThickness="0"
+                                                      Padding="0" HorizontalAlignment="Left" Margin="10,8,0,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="&#x25BE;" FontSize="10" Foreground="#9CA3AF"
+                                                           VerticalAlignment="Center" IsVisible="{Binding IsExpanded}"/>
+                                                <TextBlock Text="&#x25B8;" FontSize="10" Foreground="#9CA3AF"
+                                                           VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}"/>
+                                                <TextBlock Text="{Binding GroupTitle}" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="#6B7280" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Items.Count, StringFormat={}{0} 条}" FontSize="11"
+                                                           Foreground="#B0B7C3" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ToggleButton>
+
+                                        <!-- 组内截图列表（选中联动右侧预览） -->
+                                        <ListBox ItemsSource="{Binding Items}"
+                                                 Background="Transparent" BorderThickness="0"
+                                                 SelectedItem="{Binding $parent[Window].DataContext.Screenshots.SelectedItem}"
+                                                 IsVisible="{Binding IsExpanded}">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ScreenshotItem">
+                                                    <Grid ColumnDefinitions="Auto,56,*">
+                                                        <!-- 复选框（批量选择） -->
+                                                        <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                                                  IsChecked="{Binding IsSelected}"/>
+
+                                                        <!-- 缩略图 -->
+                                                        <Border Grid.Column="1" Width="50" Height="32"
+                                                                Background="#F1F5F9" CornerRadius="3"
+                                                                Margin="0,0,8,0" ClipToBounds="True">
+                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
+                                                        </Border>
+
+                                                        <!-- 文件名 + 来源 + 时间 -->
+                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                                                            <TextBlock Text="{Binding FileName}" FontSize="12"
+                                                                       TextTrimming="CharacterEllipsis"/>
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding SourceLabel}" FontSize="11" Foreground="#0078D4"/>
+                                                                <TextBlock Text="{Binding CaptureTimeText}" FontSize="11" Foreground="#9CA3AF"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- ========== 右栏：设置面板 / 信封占位 / 大图预览 三状态切换（与中栏同列，占满剩余宽度） ========== -->
+            <Grid Grid.Column="1" Background="#F8F9FB">
+
+                <!-- 状态C：点击左侧「设置」→ 显示设置面板（阶段6填充全部配置项） -->
+                <Grid IsVisible="{Binding IsSettingsVisible}">
+                    <ScrollViewer Padding="20">
+                        <StackPanel Spacing="14">
+                            <TextBlock Text="设置" FontSize="16" FontWeight="SemiBold"/>
+
+                            <!-- 红色使用提醒（醒目位置） -->
+                            <Border Background="#FEF2F2" BorderBrush="#FCA5A5" BorderThickness="1"
+                                    CornerRadius="8" Padding="12">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="使用提示" FontWeight="SemiBold" Foreground="#DC2626"/>
+                                    <TextBlock Text="&#x2022; 需要哪张删哪张：点选单张「删除」，或勾选多张后点「删除所选」"
+                                               FontSize="12" Foreground="#DC2626" TextWrapping="Wrap"/>
+                                    <TextBlock Text="&#x2022; 分享：选中截图 → 点「分享到微信/QQ」→ 在聊天输入框按 Ctrl+V 粘贴"
+                                               FontSize="12" Foreground="#DC2626" TextWrapping="Wrap"/>
+                                    <TextBlock Text="&#x2022; 所有截图自动归档到保存目录，左下角「打开保存目录」可随时查看"
+                                               FontSize="12" Foreground="#DC2626" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 卡片1：捕获源开关 + 快捷键设置/替换 -->
+                            <Border Background="White" CornerRadius="8" Padding="14"
+                                    BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="捕获源开关（点击右侧快捷键框可录制替换，Esc取消）" FontWeight="SemiBold"/>
+                                    <ItemsControl ItemsSource="{Binding Settings.CaptureSources}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:CaptureSourceSetting">
+                                                <Grid ColumnDefinitions="Auto,*,110,Auto" Margin="0,2">
+                                                    <!-- 启用/关闭开关 -->
+                                                    <CheckBox Grid.Column="0" VerticalAlignment="Center"
+                                                              IsChecked="{Binding IsEnabled}"/>
+
+                                                    <!-- 来源名称 + 默认值说明 -->
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0" Margin="6,0,0,0">
+                                                        <TextBlock Text="{Binding Name}" FontSize="13"/>
+                                                        <TextBlock Text="{Binding Hint}" FontSize="11" Foreground="#9CA3AF"/>
+                                                    </StackPanel>
+
+                                                    <!-- 快捷键录入框（点击录制替换） -->
+                                                    <controls:HotkeyBox Grid.Column="2" VerticalAlignment="Center"
+                                                                        Hotkey="{Binding Hotkey}"/>
+
+                                                    <!-- 恢复默认（非默认值时才显示） -->
+                                                    <Button Grid.Column="3" Content="恢复默认" FontSize="11"
+                                                            Padding="8,3" Margin="6,0,0,0" VerticalAlignment="Center"
+                                                            Command="{Binding ResetHotkeyCommand}"
+                                                            IsVisible="{Binding !IsDefault}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="快捷键默认值即原生截图键（微信 Alt+A 等）；替换后由全局热键服务转发。"
+                                               FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 卡片3：图片过滤规则 -->
+                            <Border Background="White" CornerRadius="8" Padding="14"
+                                    BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="图片过滤规则" FontWeight="SemiBold"/>
+                                    <Grid ColumnDefinitions="Auto,120,20,120,*">
+                                        <TextBlock Grid.Column="0" Text="最小分辨率" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <NumericUpDown Grid.Column="1" Value="{Binding Settings.MinWidth}" FormatString="0"
+                                                       Minimum="0" Increment="100" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="×" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        <NumericUpDown Grid.Column="3" Value="{Binding Settings.MinHeight}" FormatString="0"
+                                                       Minimum="0" Increment="100" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="4" Text="（0 = 不限制）" FontSize="11" Foreground="#9CA3AF"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <CheckBox Content="MD5 去重：相同图片只保存一份"
+                                              IsChecked="{Binding Settings.EnableDedupe}"/>
+                                    <Grid ColumnDefinitions="Auto,120,*">
+                                        <TextBlock Grid.Column="0" Text="剪贴板冷却(毫秒)" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <NumericUpDown Grid.Column="1" Value="{Binding Settings.ClipboardCooldownMs}" FormatString="0"
+                                                       Minimum="200" Increment="200" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="防微信/QQ同一张图反复保存" FontSize="11" Foreground="#9CA3AF"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 卡片4：程序行为（开机自启真实生效） -->
+                            <Border Background="White" CornerRadius="8" Padding="14"
+                                    BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="程序行为" FontWeight="SemiBold"/>
+                                    <CheckBox Content="开机自动启动（写入注册表，立即生效）"
+                                              IsChecked="{Binding Settings.IsAutoStart}"/>
+                                    <CheckBox Content="关闭窗口时最小化到托盘（固定开启）"
+                                              IsChecked="{Binding Settings.IsTrayOnClose, Mode=OneWay}" IsEnabled="False"/>
+                                    <CheckBox Content="捕获到新截图时显示系统通知"
+                                              IsChecked="{Binding Settings.ShowCaptureNotice}"/>
+                                    <TextBlock Text="开机自启开关即时生效；捕获源改动需重启程序后生效。"
+                                               FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 卡片5：剪贴板高级 -->
+                            <Border Background="White" CornerRadius="8" Padding="14"
+                                    BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="剪贴板高级" FontWeight="SemiBold"/>
+                                    <CheckBox Content="前台窗口校验：仅当微信/QQ 在前台时才捕获剪贴板"
+                                              IsChecked="{Binding Settings.FrontWindowCheck}"/>
+                                    <TextBlock Text="防止误抓其它程序复制的内容；关闭后任何程序的复制图片都会被保存。"
+                                               FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 卡片6：日志配置 -->
+                            <Border Background="White" CornerRadius="8" Padding="14"
+                                    BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="日志配置" FontWeight="SemiBold"/>
+                                    <Grid ColumnDefinitions="Auto,120,*">
+                                        <TextBlock Grid.Column="0" Text="日志保留天数" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <NumericUpDown Grid.Column="1" Value="{Binding Settings.LogRetentionDays}" FormatString="0"
+                                                       Minimum="1" Maximum="90" Increment="1" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="更早的日志自动删除（保存设置时生效）" FontSize="11" Foreground="#9CA3AF"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Settings.LogFolder}" FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 卡片7：外观 -->
+                            <Border Background="White" CornerRadius="8" Padding="14"
+                                    BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="外观" FontWeight="SemiBold"/>
+                                    <CheckBox Content="深色主题（预留：当前版本界面配色固定浅色）"
+                                              IsChecked="{Binding Settings.IsDarkTheme}"/>
+                                    <Grid ColumnDefinitions="Auto,120,*">
+                                        <TextBlock Grid.Column="0" Text="缩略图宽度(px)" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <NumericUpDown Grid.Column="1" Value="{Binding Settings.ThumbWidth}" FormatString="0"
+                                                       Minimum="80" Maximum="480" Increment="20" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="2" Text="列表缩略图尺寸" FontSize="11" Foreground="#9CA3AF"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 卡片8：调试信息 -->
+                            <Border Background="White" CornerRadius="8" Padding="14"
+                                    BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="调试信息" FontWeight="SemiBold"/>
+                                    <Grid ColumnDefinitions="70,200,*">
+                                        <TextBlock Grid.Column="0" Text="版本号" FontSize="12" Foreground="#6B7280"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Settings.Version}" FontSize="12"/>
+                                    </Grid>
+                                    <Grid ColumnDefinitions="70,200,*">
+                                        <TextBlock Grid.Column="0" Text="模组端口" FontSize="12" Foreground="#6B7280"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Settings.SocketPort}" FontSize="12"/>
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Content="保存设置" Command="{Binding Settings.SaveSettingsCommand}"
+                                                Background="#0078D4" Foreground="White"/>
+                                        <Button Content="重置为默认配置" Command="{Binding Settings.ResetConfigCommand}"
+                                                Background="Transparent" Foreground="#EF4444"/>
+                                    </StackPanel>
+                                    <TextBlock Text="说明：保存根目录、过滤规则、日志天数等在保存设置时生效；捕获源启用/快捷键改动需重启程序。"
+                                               FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- 状态A+B：列表页内容（未选中→信封占位；选中→大图预览） -->
+                <Grid IsVisible="{Binding IsListVisible}">
+
+                    <!-- 状态A：未选中任何截图 → 信封占位 -->
+                    <StackPanel IsVisible="{Binding Screenshots.IsPlaceholderVisible}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
+                        <TextBlock Text="&#x2709;" FontSize="72" Foreground="#CBD5E1" HorizontalAlignment="Center"/>
+                        <TextBlock Text="未选中任何截图" FontSize="14" Foreground="#9CA3AF" HorizontalAlignment="Center"/>
+                        <TextBlock Text="从左侧选择来源，点击列表中的截图进行预览"
+                                   FontSize="12" Foreground="#C4CCD6" HorizontalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- 状态B：选中截图 → 大图预览 -->
+                    <StackPanel IsVisible="{Binding Screenshots.IsPreviewVisible}" Margin="24" Spacing="12">
+                        <!-- 大图 -->
+                        <Border Background="White" CornerRadius="8" Padding="10"
+                                BorderBrush="#E5E7EB" BorderThickness="1">
+                            <Image Source="{Binding Screenshots.SelectedItem.Thumbnail}"
+                                   Stretch="Uniform" MaxHeight="420"/>
+                        </Border>
+
+                        <!-- 元信息 + 操作按钮 -->
+                        <Border Background="White" CornerRadius="8" Padding="14"
+                                BorderBrush="#E5E7EB" BorderThickness="1">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="{Binding Screenshots.SelectedItem.FileName}"
+                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Screenshots.SelectedItem.FilePath}"
+                                           FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal" Spacing="16">
+                                    <TextBlock Text="{Binding Screenshots.SelectedItem.SourceLabel}"
+                                               FontSize="12" Foreground="#0078D4"/>
+                                    <TextBlock Text="{Binding Screenshots.SelectedItem.CaptureTimeText}"
+                                               FontSize="12" Foreground="#6B7280"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                                    <Button Content="打开文件位置" Command="{Binding Screenshots.OpenFileLocationCommand}"/>
+                                    <Button Content="复制路径" Command="{Binding Screenshots.CopyPathCommand}"/>
+                                    <Button Content="删除" Command="{Binding Screenshots.DeleteCommand}"/>
+                                    <Button Content="&#x1F4E4; 分享到微信" Command="{Binding Screenshots.ShareToWeChatCommand}"
+                                            Background="#07C160" Foreground="White"/>
+                                    <Button Content="&#x1F4E4; 分享到QQ" Command="{Binding Screenshots.ShareToQQCommand}"
+                                            Background="#12B7F5" Foreground="White"/>
+                                </StackPanel>
+                                <TextBlock Text="分享：复制图片到剪贴板并唤起微信/QQ，在聊天输入框按 Ctrl+V 粘贴"
+                                           FontSize="11" Foreground="#9CA3AF"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

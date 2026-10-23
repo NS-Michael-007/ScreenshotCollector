@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ScreenshotCollector.Views.SplashWindow"
+        Width="560"
+        Height="380"
+        WindowStartupLocation="CenterScreen"
+        SystemDecorations="None"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Background="Transparent">
+
+    <!-- ========== 启动画面：背景图 + 遮罩 + 圆形Logo + 品牌文字 ========== -->
+    <Grid>
+        <!-- 背景图（铺满） -->
+        <Image Source="avares://ScreenshotCollector/Assets/Brand/bg.jpg"
+               Stretch="UniformToFill"/>
+
+        <!-- 暗色遮罩：保证文字清晰可读 -->
+        <Border Background="#99000000"/>
+
+        <!-- 中央品牌区 -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14">
+            <!-- 圆形 Logo（同一张图圆形裁剪 + 白色圆环） -->
+            <Border Width="108" Height="108" CornerRadius="54"
+                    BorderBrush="White" BorderThickness="3"
+                    ClipToBounds="True" HorizontalAlignment="Center"
+                    BoxShadow="0 4 14 #66000000">
+                <Image Source="avares://ScreenshotCollector/Assets/Brand/bg.jpg"
+                       Stretch="UniformToFill"/>
+            </Border>
+
+            <!-- 主标题：双层文字实现描边/投影的 Logo 感 -->
+            <Grid HorizontalAlignment="Center">
+                <!-- 底层：偏移的深色投影 -->
+                <TextBlock Text="都市天际线 王四季"
+                           FontFamily="Microsoft YaHei"
+                           FontSize="30" FontWeight="ExtraBold"
+                           Foreground="#14142B" Margin="2,3,0,0" LetterSpacing="2"/>
+                <!-- 上层：白色主字 -->
+                <TextBlock Text="都市天际线 王四季"
+                           FontFamily="Microsoft YaHei"
+                           FontSize="30" FontWeight="ExtraBold"
+                           Foreground="White" LetterSpacing="2"/>
+            </Grid>
+
+            <!-- 副标题（英文，增强品牌感） -->
+            <TextBlock Text="SCREENSHOT AUTO COLLECTOR"
+                       FontFamily="Microsoft YaHei"
+                       FontSize="12" Foreground="#D9FFFFFF"
+                       HorizontalAlignment="Center" LetterSpacing="4"/>
+        </StackPanel>
+
+        <!-- 底部版本号 -->
+        <TextBlock Text="v0.1.0" FontSize="11" Foreground="#99FFFFFF"
+                   HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
+    </Grid>
+</Window>
