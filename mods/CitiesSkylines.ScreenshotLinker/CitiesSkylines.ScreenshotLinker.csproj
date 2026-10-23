@@ -7,7 +7,7 @@
     <RootNamespace>CitiesSkylines.ScreenshotLinker</RootNamespace>
     <Deterministic>false</Deterministic>
     <!-- 编译产物直接输出到游戏本地模组文件夹（dotnet build 即发布，无需复制）
-         ICities.dll 由游戏环境提供（Private=false 不复制）；0Harmony.dll 随包复制到此处 -->
+         ICities.dll 由游戏环境提供（Private=false 不复制）；CitiesHarmony.Harmony.dll 随包复制到此处 -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>$(LOCALAPPDATA)\Colossal Order\Cities_Skylines\Addons\Mods\CitiesSkylines.ScreenshotLinker\</OutputPath>
   </PropertyGroup>
@@ -28,6 +28,15 @@
     <Reference Include="CitiesHarmony.Harmony">
       <HintPath>lib\CitiesHarmony.Harmony.dll</HintPath>
       <Private>true</Private>
+    </Reference>
+    <!-- 游戏 UI / 引擎程序集（游戏进程已加载，不随模组复制；供游戏界面按钮使用） -->
+    <Reference Include="UnityEngine">
+      <HintPath>D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities_Data\Managed\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="ColossalManaged">
+      <HintPath>D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities_Data\Managed\ColossalManaged.dll</HintPath>
+      <Private>false</Private>
     </Reference>
   </ItemGroup>
 

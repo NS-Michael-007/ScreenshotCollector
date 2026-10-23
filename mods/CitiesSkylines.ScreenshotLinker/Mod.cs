@@ -20,6 +20,7 @@ namespace CitiesSkylines.ScreenshotLinker
         private ScreenshotWatcher _watcher;
         private Harmony _harmony;
         private bool _harmonyActive;
+        private UnityEngine.GameObject _uiObject;
 
         /// <summary>游戏内模组名称（内容管理器中显示，独立存在）</summary>
         public string Name => "截图自动收集器联动（ScreenshotLinker）";
@@ -58,6 +59,22 @@ namespace CitiesSkylines.ScreenshotLinker
             }
 
             ModLog.Info("模组已启用：Harmony " + (_harmonyActive ? "补丁成功" : "补丁未命中/关闭（目录监听兜底）"));
+
+            // —— 游戏界面「一键启动」按钮 ——
+            if (ReferenceEquals(_uiObject, null))
+            {
+                try
+                {
+                    _uiObject = new UnityEngine.GameObject("ScreenshotLinkerUIRoot");
+                    _uiObject.AddComponent<ScreenshotLinkerUI>();
+                    UnityEngine.Object.DontDestroyOnLoad(_uiObject);
+                    ModLog.Info("已挂载游戏内按钮组件");
+                }
+                catch (Exception ex)
+                {
+                    ModLog.Warn("挂载游戏内按钮失败：" + ex.Message);
+                }
+            }
         }
 
         /// <summary>模组停用：卸载补丁 + 释放监听</summary>
@@ -71,6 +88,11 @@ namespace CitiesSkylines.ScreenshotLinker
             catch (Exception ex)
             {
                 ModLog.Error("卸载 Harmony 补丁失败：" + ex.Message);
+            }
+            if (!ReferenceEquals(_uiObject, null))
+            {
+                UnityEngine.Object.Destroy(_uiObject);
+                _uiObject = null;
             }
             ModLog.Info("模组已停用");
         }
@@ -122,11 +144,63 @@ namespace CitiesSkylines.ScreenshotLinker
                 });
 
             helper.AddSpace(8);
+
+            // —— 一键启动配置 ——
+            helper.AddGroup("一键启动（游戏界面按钮）");
+            helper.AddTextfield(
+                "桌面端程序路径",
+                cfg.GetDesktopAppPath(),
+                text => { },
+                text =>
+                {
+                    cfg.DesktopAppPath = text;
+                    cfg.Save();
+                    ModLog.Info("已更新桌面端程序路径：" + text);
+                });
+            helper.AddTextfield(
+                "游戏内按钮文字（最长 8 个字符）",
+                cfg.GetButtonText(),
+                text => { },
+                text =>
+                {
+                    if (!ReferenceEquals(text, null) && text.Length > ScreenshotLinkerConfig.ButtonTextMaxLength)
+                    {
+                        text = text.Substring(0, ScreenshotLinkerConfig.ButtonTextMaxLength);
+                        ModLog.Warn("按钮文字超过 " + ScreenshotLinkerConfig.ButtonTextMaxLength + " 字，已截断为：" + text);
+                    }
+                    cfg.ButtonText = text;
+                    cfg.Save();
+                });
+
+            helper.AddSpace(8);
             helper.AddButton("保存配置（重启模组生效）", () =>
             {
                 cfg.Save();
                 ModLog.Info("已手动保存配置");
             });
+        }
+
+        /// <summary>启动桌面端截图收集器（游戏内按钮 / 设置页按钮共用）。</summary>
+        public static void LaunchDesktopApp()
+        {
+            string path = ScreenshotLinkerConfig.Current.GetDesktopAppPath();
+            if (!System.IO.File.Exists(path))
+            {
+                ModLog.Warn("桌面端程序不存在：" + path);
+                return;
+            }
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo();
+                psi.FileName = path;
+                psi.UseShellExecute = true; // 等价双击启动；桌面端自带单实例保护，不会多开
+                System.Diagnostics.Process.Start(psi);
+                ModLog.Info("已请求启动桌面端：" + path);
+            }
+            catch (Exception ex)
+            {
+                ModLog.Warn("启动桌面端失败：" + ex.Message);
+            }
         }
 
         /// <summary>
