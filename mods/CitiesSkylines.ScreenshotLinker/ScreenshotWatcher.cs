@@ -16,9 +16,10 @@ namespace CitiesSkylines.ScreenshotLinker
     public sealed class ScreenshotWatcher
     {
         private readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
-        private readonly object _lock = new object();
+        // 启动标志用 int + Interlocked（.NET 1.1 API，绝对存在），刻意不用 lock/Monitor：
+        // 游戏 Mono 环境极不稳定（曾报 Monitor.Enter 缺失），Interlocked 无任何重载风险。
+        private int _startedFlag;
         private Timer _retryTimer;
-        private bool _started;
 
         /// <summary>游戏数据目录（Colossal Order\Cities_Skylines）</summary>
         private static string GameRoot()
@@ -30,17 +31,7 @@ namespace CitiesSkylines.ScreenshotLinker
 
         public void Start()
         {
-            bool lockTaken = false;
-            try
-            {
-                Monitor.Enter(_lock, ref lockTaken);
-                if (_started) return;
-                _started = true;
-            }
-            finally
-            {
-                if (lockTaken) Monitor.Exit(_lock);
-            }
+            if (Interlocked.CompareExchange(ref _startedFlag, 1, 0) != 0) return;
 
             // 监听两个截图目录（分类对应桌面端归档分类）
             TryWatch("Screenshots", "天际线");
@@ -52,35 +43,18 @@ namespace CitiesSkylines.ScreenshotLinker
 
         public void Stop()
         {
-            bool lockTaken = false;
-            try
-            {
-                Monitor.Enter(_lock, ref lockTaken);
-                _started = false;
-            }
-            finally
-            {
-                if (lockTaken) Monitor.Exit(_lock);
-            }
+            Interlocked.Exchange(ref _startedFlag, 0);
 
             if (_retryTimer != null) { _retryTimer.Dispose(); _retryTimer = null; }
 
-            lockTaken = false;
-            try
-            {
-                Monitor.Enter(_lock, ref lockTaken);
-                foreach (var w in _watchers) { try { w.Dispose(); } catch { } }
-                _watchers.Clear();
-            }
-            finally
-            {
-                if (lockTaken) Monitor.Exit(_lock);
-            }
+            foreach (var w in _watchers) { try { w.Dispose(); } catch { } }
+            _watchers.Clear();
         }
 
         private void RetryAll()
         {
-            if (!_started) return;
+            // 读取启动标志（CompareExchange 原值读法）
+            if (Interlocked.CompareExchange(ref _startedFlag, 0, 0) == 0) return;
             TryWatch("Screenshots", "天际线");
             TryWatch("Snapshots", "编辑器快照");
         }
@@ -96,32 +70,24 @@ namespace CitiesSkylines.ScreenshotLinker
                     ModLog.Info("目录尚未创建，等待重试：" + dir);
                     return;
                 }
-                bool lockTaken = false;
-                try
+                // 无锁：Start/Stop 在主线程、RetryAll 在 Timer 线程，潜在竞态窗口极小；
+                // 若遍历中被 Stop 修改集合 → foreach 抛异常 → 外层 catch 兜底，不影响主流程。
+                foreach (var w in _watchers)
                 {
-                    Monitor.Enter(_lock, ref lockTaken);
-                    // 已监听则不重复
-                    foreach (var w in _watchers)
-                    {
-                        if (string.Equals(w.Path.TrimEnd(Path.DirectorySeparatorChar),
-                                          dir.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
-                            return;
-                    }
+                    if (string.Equals(w.Path.TrimEnd(Path.DirectorySeparatorChar),
+                                      dir.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                        return;
+                }
 
-                    var watcher = new FileSystemWatcher(dir)
-                    {
-                        IncludeSubdirectories = false,
-                        Filter = "*.png"
-                    };
-                    watcher.Created += (s, e) => OnNewFile(e.FullPath, category);
-                    watcher.EnableRaisingEvents = true;
-                    _watchers.Add(watcher);
-                    ModLog.Info("已监听：" + dir + "（分类：" + category + "）");
-                }
-                finally
+                var watcher = new FileSystemWatcher(dir)
                 {
-                    if (lockTaken) Monitor.Exit(_lock);
-                }
+                    IncludeSubdirectories = false,
+                    Filter = "*.png"
+                };
+                watcher.Created += (s, e) => OnNewFile(e.FullPath, category);
+                watcher.EnableRaisingEvents = true;
+                _watchers.Add(watcher);
+                ModLog.Info("已监听：" + dir + "（分类：" + category + "）");
             }
             catch (Exception ex)
             {

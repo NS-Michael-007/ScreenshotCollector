@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Threading;
 
 namespace CitiesSkylines.ScreenshotLinker
 {
@@ -10,7 +9,6 @@ namespace CitiesSkylines.ScreenshotLinker
     /// </summary>
     public static class ModLog
     {
-        private static readonly object Sync = new object();
         private static string _logPath;
 
         public static void Info(string msg) => Write("INFO", msg);
@@ -21,13 +19,11 @@ namespace CitiesSkylines.ScreenshotLinker
 
         private static void Write(string level, string msg)
         {
-            // 注意：不能用 lock 语句（net46 编译生成 Monitor.Enter(object) 单参重载，
-            // 游戏 Mono 的 .NET 3.5 API 只有 Monitor.Enter(object, ref bool)，运行时会
-            // MissingMethodException）→ 显式双参数写法
-            bool lockTaken = false;
+            // 刻意无锁：游戏 Mono 环境极不稳定（.NET 3.5 surface 曾报 Monitor.Enter 缺失），
+            // 日志仅是排障辅助，多线程交错最坏丢一行/一次 IOException，全部 catch 兜底，
+            // 绝不允许日志机制反过来拖垮模组加载。
             try
             {
-                Monitor.Enter(Sync, ref lockTaken);
                 if (_logPath == null)
                 {
                     string dllDir = Path.GetDirectoryName(
@@ -40,10 +36,6 @@ namespace CitiesSkylines.ScreenshotLinker
             catch
             {
                 // 日志失败不影响主流程
-            }
-            finally
-            {
-                if (lockTaken) Monitor.Exit(Sync);
             }
         }
     }
