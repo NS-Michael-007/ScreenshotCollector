@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Threading;
 
 namespace CitiesSkylines.ScreenshotLinker
@@ -15,6 +14,13 @@ namespace CitiesSkylines.ScreenshotLinker
     /// </summary>
     public sealed class ScreenshotWatcher
     {
+        /// <summary>
+        /// 快照分类委托。**刻意用自定义 delegate**：System.Func`2 在 .NET 4 位于 mscorlib，
+        /// 而游戏 Mono（.NET 3.5 surface）加载不到（TypeLoadException: System.Func`2），
+        /// 自定义委托是 .NET 1.x 语法，绝对安全。
+        /// </summary>
+        public delegate string SnapshotClassifier(string filePath);
+
         private readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
         // 启动标志用 int + Interlocked（.NET 1.1 API，绝对存在），刻意不用 lock/Monitor：
         // 游戏 Mono 环境极不稳定（曾报 Monitor.Enter 缺失），Interlocked 无任何重载风险。
@@ -72,7 +78,7 @@ namespace CitiesSkylines.ScreenshotLinker
         /// 核心监听逻辑。classifier 非空时按文件名细分分类（Snapshots 的缩略图/提示图），
         /// 为空时一律用 defaultCategory（Screenshots 顶层平铺结构）。
         /// </summary>
-        private void TryWatchCore(string subDir, string defaultCategory, bool recursive, Func<string, string> classifier)
+        private void TryWatchCore(string subDir, string defaultCategory, bool recursive, SnapshotClassifier classifier)
         {
             string dir = PathUtil.Join(GameRoot(), subDir);
             try
@@ -142,10 +148,13 @@ namespace CitiesSkylines.ScreenshotLinker
                 string dir = PathUtil.Join(GameRoot(), category == "编辑器快照" ? "Snapshots" : "Screenshots");
                 if (!Directory.Exists(dir)) return;
 
-                var latest = new DirectoryInfo(dir)
-                    .GetFiles("*.png")
-                    .OrderByDescending(f => f.LastWriteTime)
-                    .FirstOrDefault();
+                // 手写循环找最新截图（**禁用 LINQ OrderByDescending**：其 lambda 编译成
+                // mscorlib 的 Func`2 引用，游戏 Mono 加载不到 → TypeLoadException）
+                FileInfo latest = null;
+                foreach (FileInfo f in new DirectoryInfo(dir).GetFiles("*.png"))
+                {
+                    if (latest == null || f.LastWriteTime > latest.LastWriteTime) latest = f;
+                }
                 if (latest == null) return;
 
                 // 复用防抖推送：等文件写完再发
