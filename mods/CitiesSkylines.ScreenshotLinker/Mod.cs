@@ -67,15 +67,17 @@ namespace CitiesSkylines.ScreenshotLinker
                 _harmony = HarmonyInstance.Create(HarmonyId);
 
                 // 游戏截图管理器（天际线一代：Game.ScreenshotManager，程序集 Assembly-CSharp）
+                // 注意：游戏 Mono 环境为 .NET 3.5 API surface，`type == null` 会触发
+                // Type.op_Equality（.NET 4.0 才存在）→ MissingMethodException，必须用引用比较
                 var type = Type.GetType("Game.ScreenshotManager, Assembly-CSharp");
-                if (type == null)
+                if (ReferenceEquals(type, null))
                 {
                     ModLog.Info("未找到 Game.ScreenshotManager，跳过 Harmony 补丁");
                     return false;
                 }
 
                 var method = type.GetMethod("TakeScreenshot");
-                if (method == null)
+                if (ReferenceEquals(method, null))
                 {
                     ModLog.Info("未找到 TakeScreenshot 方法，跳过 Harmony 补丁");
                     return false;

@@ -26,9 +26,16 @@ namespace CitiesSkylines.ScreenshotLinker
 
                 using (var client = new TcpClient())
                 {
-                    // 2 秒连接超时，避免阻塞游戏
-                    var task = client.ConnectAsync("127.0.0.1", DefaultPort);
-                    if (!task.Wait(2000)) return false;
+                    // 2 秒连接超时，避免阻塞游戏；
+                    // 用 BeginConnect/EndConnect（.NET 2.0 API）而非 ConnectAsync（.NET 4.5），
+                    // 兼容游戏 Mono 的 .NET 3.5 API surface
+                    var result = client.BeginConnect("127.0.0.1", DefaultPort, null, null);
+                    if (!result.AsyncWaitHandle.WaitOne(2000))
+                    {
+                        client.Close();
+                        return false;
+                    }
+                    client.EndConnect(result);
 
                     using (var stream = client.GetStream())
                     {
