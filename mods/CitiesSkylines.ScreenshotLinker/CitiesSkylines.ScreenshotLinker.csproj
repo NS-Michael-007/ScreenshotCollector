@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net46</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <AssemblyName>CitiesSkylines.ScreenshotLinker</AssemblyName>
+    <RootNamespace>CitiesSkylines.ScreenshotLinker</RootNamespace>
+    <!-- 输出到 bin\Debug 根（不带 net46 子目录，便于发布脚本直接取 DLL） -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <Deterministic>false</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 无 .NET Framework 本机 SDK 也能 dotnet build（NuGet 还原引用程序集） -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 游戏模组接口（ICities.dll 由游戏环境提供，不随模组复制） -->
+    <Reference Include="ICities">
+      <HintPath>D:\SteamLibrary\steamapps\common\Cities_Skylines\Cities_Data\Managed\ICities.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
