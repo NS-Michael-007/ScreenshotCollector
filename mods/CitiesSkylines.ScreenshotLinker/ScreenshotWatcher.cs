@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 
 namespace CitiesSkylines.ScreenshotLinker
@@ -102,13 +103,39 @@ namespace CitiesSkylines.ScreenshotLinker
             }
         }
 
+        /// <summary>
+        /// 供 Harmony 补丁调用：把指定分类目录里最新的一张截图推送给桌面端。
+        /// 补丁触发时机早于文件系统事件，实现"截图瞬间即推送"。
+        /// </summary>
+        public static void PushLatest(string category)
+        {
+            try
+            {
+                string dir = Path.Combine(GameRoot(), category == "编辑器快照" ? "Snapshots" : "Screenshots");
+                if (!Directory.Exists(dir)) return;
+
+                var latest = new DirectoryInfo(dir)
+                    .GetFiles("*.png")
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .FirstOrDefault();
+                if (latest == null) return;
+
+                // 复用防抖推送：等文件写完再发
+                ThreadPool.QueueUserWorkItem(_ => DeliverAfterSettle(latest.FullName, category));
+            }
+            catch (Exception ex)
+            {
+                ModLog.Error("PushLatest 异常：" + ex.Message);
+            }
+        }
+
         private void OnNewFile(string path, string category)
         {
             // 后台线程：等文件写完再推（截图写入过程可能触发多次事件）
             ThreadPool.QueueUserWorkItem(_ => DeliverAfterSettle(path, category));
         }
 
-        private void DeliverAfterSettle(string path, string category)
+        private static void DeliverAfterSettle(string path, string category)
         {
             try
             {

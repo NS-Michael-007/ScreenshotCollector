@@ -19,5 +19,11 @@ if (Test-Path -LiteralPath $pdb) {
     Copy-Item -LiteralPath $pdb -Destination $dstDir -Force
 }
 
+# Harmony 框架随包携带（与工坊 Harmony 模组同结构）
+$harmony = Join-Path $root "lib\0Harmony.dll"
+if (Test-Path -LiteralPath $harmony) {
+    Copy-Item -LiteralPath $harmony -Destination $dstDir -Force
+}
+
 Write-Host "已发布到：$dstDir" -ForegroundColor Green
 Write-Host "在游戏 内容管理器 中启用「截图自动收集器联动」即可。" -ForegroundColor Green
