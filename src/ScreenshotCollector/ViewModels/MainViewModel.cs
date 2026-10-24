@@ -23,11 +23,10 @@ public partial class MainViewModel : BaseViewModel
     public ObservableCollection<MenuItem> MenuItems { get; } = new()
     {
         new() { DisplayName = "\U0001F5BC 全部截图" },
-        new() { DisplayName = "\U0001F3D9 天际线游戏截图", SourceLabel = "天际线" },
+        new() { DisplayName = "\U0001F3D9 天际线游戏截图", SourceLabel = "天际线", SubText = "（F12键截图文件）" },
         new() { DisplayName = "\U0001F5FA 编辑器快照", SourceLabel = "编辑器快照" },
         new() { DisplayName = "\U0001F4C1 编辑器缩略图", SourceLabel = "编辑器缩略图" },
         new() { DisplayName = "\U0001F4A1 编辑器提示图", SourceLabel = "编辑器提示图" },
-        new() { DisplayName = "\U0001F3AE Steam F12截图", SourceLabel = "Steam" },
         new() { DisplayName = "\U0001F4AC 微信截图", SourceLabel = "微信" },
         new() { DisplayName = "\U0001F9E9 QQ截图", SourceLabel = "QQ" },
         new() { DisplayName = "\u2699 设置", IsSettings = true }
@@ -62,6 +61,9 @@ public partial class MainViewModel : BaseViewModel
 
     private Window? _window; // 主窗口引用（应用主题、托盘交互）
 
+    /// <summary>模组连接状态检测定时器（每 5 秒探测游戏进程，让状态灯可读）</summary>
+    private System.Threading.Timer? _gameCheckTimer;
+
     /// <summary>主窗口显示后调用：启动需要窗口对象的捕获服务与托盘</summary>
     public void StartCaptureServices(Window window)
     {
@@ -94,19 +96,12 @@ public partial class MainViewModel : BaseViewModel
             HotkeyService.RegisteredCount > 0 ? ServiceStatusLevel.Green : ServiceStatusLevel.Yellow,
             HotkeyService.RegisteredCount > 0 ? $"监听中（{HotkeyService.RegisteredCount} 个自定义键）" : "默认键无需转发");
 
-        // 托盘：打开主面板 / 暂停继续 / 退出程序
+        // 托盘：打开主面板 / 暂停继续 / 退出程序（关闭即真退出，不再拦截）
         Tray.Create(
             window,
             onOpen: () => window.Show(),
             onTogglePause: TogglePause,
-            onExit: () =>
-            {
-                if (window is MainWindow main)
-                {
-                    main.AllowClose();
-                    window.Close();
-                }
-            });
+            onExit: () => window.Close());
     }
 
     // ---------- 页面切换 ----------
@@ -163,7 +158,7 @@ public partial class MainViewModel : BaseViewModel
             LogService.Info("App", $"列表新增截图：{System.IO.Path.GetFileName(destPath)}（{category}，原始 {sourcePath ?? "未知"}）");
         };
 
-        // 文件夹监听：注册默认截图目录（天际线/编辑器快照/Steam），实时更新状态灯
+        // 文件夹监听：注册默认截图目录（天际线/编辑器快照），实时更新状态灯
         FolderWatcher = new FolderWatcherService(Archive);
         FolderWatcher.FolderStatusChanged += (category, found, path) =>
         {
@@ -171,7 +166,6 @@ public partial class MainViewModel : BaseViewModel
             {
                 "天际线" => "天际线游戏截图",
                 "编辑器快照" => "编辑器快照",
-                "Steam" => "Steam F12 截图",
                 _ => category
             };
             SetStatus(name,
@@ -192,10 +186,23 @@ public partial class MainViewModel : BaseViewModel
             SetStatus("天际线模组通信", ServiceStatusLevel.Red, "端口被占用");
         }
 
+        // 模组连接状态智能刷新：每 5 秒检测游戏进程是否存在，
+        // 未连接时给出明确原因（游戏未启动 / 游戏运行中等待模组），避免像卡死的假象
+        _gameCheckTimer = new System.Threading.Timer(_ =>
+        {
+            var running = System.Diagnostics.Process.GetProcessesByName("Cities").Length > 0;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                var item = StatusItems.FirstOrDefault(i => i.Name == "天际线模组通信");
+                if (item == null || item.Level == ServiceStatusLevel.Green) return; // 已连接则不打扰
+                SetStatus("天际线模组通信", ServiceStatusLevel.Yellow,
+                    running ? "游戏运行中 · 等待模组连接" : "游戏未启动 · 模组离线");
+            });
+        }, null, 3000, 5000);
+
         // 初始状态灯：全部等待启动 → 由上方各服务启动事件刷新
         StatusItems.Add(new ServiceStatusItem { Name = "天际线游戏截图", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
         StatusItems.Add(new ServiceStatusItem { Name = "编辑器快照", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
-        StatusItems.Add(new ServiceStatusItem { Name = "Steam F12 截图", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
         StatusItems.Add(new ServiceStatusItem { Name = "微信 / QQ 剪贴板", Level = ServiceStatusLevel.Yellow, StatusText = "等待窗口显示" });
         StatusItems.Add(new ServiceStatusItem { Name = "天际线模组通信", Level = ServiceStatusLevel.Yellow, StatusText = "等待模组连接" });
         StatusItems.Add(new ServiceStatusItem { Name = "全局热键", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });

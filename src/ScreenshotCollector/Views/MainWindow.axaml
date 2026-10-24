@@ -118,7 +118,11 @@
                              ItemsSource="{Binding MenuItems}">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:MenuItem">
-                                <TextBlock Text="{Binding DisplayName}"/>
+                                <StackPanel Margin="0,3">
+                                    <TextBlock Text="{Binding DisplayName}"/>
+                                    <TextBlock Text="{Binding SubText}" FontSize="10" Foreground="#94A3B8"
+                                               IsVisible="{Binding HasSubText}" Margin="0,1,0,0"/>
+                                </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -311,8 +315,8 @@
                                     <TextBlock Text="程序行为" FontWeight="SemiBold"/>
                                     <CheckBox Content="开机自动启动（写入注册表，立即生效）"
                                               IsChecked="{Binding Settings.IsAutoStart}"/>
-                                    <CheckBox Content="关闭窗口时最小化到托盘（固定开启）"
-                                              IsChecked="{Binding Settings.IsTrayOnClose, Mode=OneWay}" IsEnabled="False"/>
+                                    <CheckBox Content="关闭窗口行为：点击 X 直接退出程序（后台运行交给托盘菜单/开机自启）"
+                                              IsEnabled="False" IsChecked="False"/>
                                     <CheckBox Content="捕获到新截图时显示系统通知"
                                               IsChecked="{Binding Settings.ShowCaptureNotice}"/>
                                     <TextBlock Text="开机自启开关即时生效；捕获源改动需重启程序后生效。"

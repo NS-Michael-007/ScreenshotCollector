@@ -24,8 +24,8 @@ public class FolderWatcherService
 
     /// <summary>
     /// 注册默认监听目录（启动时调用）：
-    /// 天际线游戏截图、天际线编辑器快照、Steam 截图（自动探测路径）。
-    /// 目录不存在的会跳过并写日志（用户没装游戏/Steam时正常现象）。
+    /// 天际线游戏截图（F12）、天际线编辑器快照（含 UUID 子目录）。
+    /// 目录不存在的会跳过并写日志（用户没装游戏/没截过图时正常现象）。
     /// </summary>
     public void RegisterDefaultFolders()
     {
@@ -35,17 +35,6 @@ public class FolderWatcherService
         AddWatch(Path.Combine(csDir, "Screenshots"), "天际线");
         // Snapshots 是 UUID 子目录结构（快照/缩略图/提示图），须递归监听并按文件名分类
         AddSnapshotWatch(Path.Combine(csDir, "Snapshots"));
-
-        var steamShot = FindSteamScreenshotsFolder();
-        if (steamShot != null)
-        {
-            AddWatch(steamShot, "Steam");
-        }
-        else
-        {
-            LogService.Info("FolderWatch", "未找到 Steam 截图目录（Cities:Skylines 尚未用 Steam 截图过）");
-            FolderStatusChanged?.Invoke("Steam", false, "");
-        }
     }
 
     /// <summary>注册一个监听目录（目录不存在则跳过并写日志）</summary>
@@ -145,29 +134,5 @@ public class FolderWatcherService
     {
         foreach (var watcher in _watchers) watcher.Dispose();
         _watchers.Clear();
-    }
-
-    /// <summary>探测 Steam 的 Cities:Skylines 截图目录：userdata\*\760\remote\255710\screenshots</summary>
-    private static string? FindSteamScreenshotsFolder()
-    {
-        var candidates = new[]
-        {
-            @"C:\Program Files (x86)\Steam\userdata",
-            @"C:\Program Files\Steam\userdata",
-            @"D:\Steam\userdata",
-            @"D:\SteamLibrary\userdata",
-            @"E:\Steam\userdata"
-        };
-
-        foreach (var userData in candidates)
-        {
-            if (!Directory.Exists(userData)) continue;
-            foreach (var userDir in Directory.GetDirectories(userData))
-            {
-                var shot = Path.Combine(userDir, "760", "remote", "255710", "screenshots");
-                if (Directory.Exists(shot)) return shot;
-            }
-        }
-        return null;
     }
 }

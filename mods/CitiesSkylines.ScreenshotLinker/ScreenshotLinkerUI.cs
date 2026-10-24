@@ -6,13 +6,17 @@ namespace CitiesSkylines.ScreenshotLinker
 {
     /// <summary>
     /// 游戏界面内的「一键启动桌面端」浮动按钮（常驻 GameObject 上，跨场景保留）。
+    /// - 固定尺寸长方形：240×50（不再随文字自适应）；
     /// - 浮动面板：按住左键可拖拽到任意位置（拖动超过阈值视为拖拽，松手不触发启动）；
-    /// - 宽度贴合文字：随文字长度自适应（8 字上限），无固定底座；
     /// - 默认位于屏幕右上角。
     /// 兼容游戏 Mono 的 .NET 3.5：仅用 .NET 1.x API + 游戏自带 UnityEngine/ColossalManaged。
     /// </summary>
     public class ScreenshotLinkerUI : MonoBehaviour
     {
+        /// <summary>按钮固定尺寸（用户要求长方形 240×50）</summary>
+        private const float ButtonWidth = 240f;
+        private const float ButtonHeight = 50f;
+
         private UIButton _button;
         private UIView _view;
         private DateTime _lastTryUtc = DateTime.MinValue;
@@ -61,11 +65,13 @@ namespace CitiesSkylines.ScreenshotLinker
                 }
             }
 
-            // 文字取配置（已按 8 字上限截断），面板 autoSize 完全贴合字符长度（无固定底座）
+            // 文字取配置（已按 8 字上限截断）；固定长方形 240×50（不再随文字自适应）
             string text = ScreenshotLinkerConfig.Current.GetButtonText();
             UIButton btn = (UIButton)_view.AddUIComponent(typeof(UIButton)); // 非泛型 API（兼容所有 ColossalManaged 版本）
             btn.name = "ScreenshotLinkerLaunchButton";
-            btn.autoSize = true; // 宽高随文字自动计算，刚好包住字符（ButtonMenu 皮肤自带视觉边距）
+            btn.autoSize = false;            // 固定尺寸，不用 autoSize
+            btn.width = ButtonWidth;         // 240
+            btn.height = ButtonHeight;       // 50
             btn.text = text;
             btn.textScale = 0.85f;
             btn.textColor = new Color32(255, 255, 255, 255);
