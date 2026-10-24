@@ -96,11 +96,12 @@ public partial class MainViewModel : BaseViewModel
             HotkeyService.RegisteredCount > 0 ? ServiceStatusLevel.Green : ServiceStatusLevel.Yellow,
             HotkeyService.RegisteredCount > 0 ? $"监听中（{HotkeyService.RegisteredCount} 个自定义键）" : "默认键无需转发");
 
-        // 托盘：打开主面板 / 暂停继续 / 退出程序（关闭即真退出，不再拦截）
+        // 托盘：打开主面板 / 暂停继续 / 隐藏到托盘后台运行 / 退出程序（关闭窗口 = 直接退出）
         Tray.Create(
             window,
             onOpen: () => window.Show(),
             onTogglePause: TogglePause,
+            onHideToTray: () => window.Hide(),
             onExit: () => window.Close());
     }
 

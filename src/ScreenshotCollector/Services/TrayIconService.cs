@@ -7,15 +7,16 @@ namespace ScreenshotCollector.Services;
 
 /// <summary>
 /// 托盘图标服务（阶段5-5）：
-/// 任务栏通知区常驻图标 + 右键菜单（打开主面板 / 暂停继续 / 退出）；
-/// 关闭窗口时最小化到托盘；提供注册表开机自启能力（开关由设置面板控制）。
+/// 任务栏通知区常驻图标 + 右键菜单（打开主面板 / 暂停继续 / 隐藏到托盘后台运行 / 退出程序）；
+/// 关闭窗口 = 直接退出（见 MainWindow），需要后台运行时用托盘菜单「隐藏到托盘」；
+/// 提供注册表开机自启能力（开关由设置面板控制）。
 /// </summary>
 public class TrayIconService : IDisposable
 {
     private TrayIcon? _trayIcon;
 
     /// <summary>创建托盘图标与右键菜单</summary>
-    public void Create(Window window, Action onOpen, Action onTogglePause, Action onExit)
+    public void Create(Window window, Action onOpen, Action onTogglePause, Action onHideToTray, Action onExit)
     {
         try
         {
@@ -36,12 +37,15 @@ public class TrayIconService : IDisposable
             openItem.Click += (_, _) => onOpen();
             var pauseItem = new NativeMenuItem("暂停捕获 / 继续捕获");
             pauseItem.Click += (_, _) => onTogglePause();
+            var hideItem = new NativeMenuItem("隐藏到托盘（后台运行）");
+            hideItem.Click += (_, _) => onHideToTray();
             var exitItem = new NativeMenuItem("退出程序");
             exitItem.Click += (_, _) => onExit();
 
             menu.Items.Add(openItem);
             menu.Items.Add(new NativeMenuItemSeparator());
             menu.Items.Add(pauseItem);
+            menu.Items.Add(hideItem);
             menu.Items.Add(new NativeMenuItemSeparator());
             menu.Items.Add(exitItem);
 
