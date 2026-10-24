@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace ScreenshotCollector.ViewModels;
 
@@ -10,7 +11,7 @@ namespace ScreenshotCollector.ViewModels;
 /// 单条截图记录（模型）。
 /// 对应中间截图列表里的一行：复选框 + 缩略图 + 文件名 + 来源 + 时间。
 /// </summary>
-public class ScreenshotItem : BaseViewModel
+public partial class ScreenshotItem : BaseViewModel
 {
     /// <summary>文件名，如 20261023_102211_WeChat.png</summary>
     public string FileName { get; init; } = string.Empty;
@@ -30,8 +31,9 @@ public class ScreenshotItem : BaseViewModel
     /// <summary>来源标签，如 天际线 / Steam / 微信 / QQ</summary>
     public string SourceLabel { get; init; } = string.Empty;
 
-    /// <summary>缩略图（列表与预览共用）</summary>
-    public Bitmap? Thumbnail { get; set; }
+    /// <summary>缩略图（列表与预览共用）—— 改为 ObservableProperty 以便 UI 自动刷新</summary>
+    [ObservableProperty]
+    private Bitmap? _thumbnail;
 
     /// <summary>捕获时间的显示文本</summary>
     public string CaptureTimeText => CaptureTime.ToString("yyyy-MM-dd HH:mm:ss");
@@ -41,18 +43,13 @@ public class ScreenshotItem : BaseViewModel
         ? "（历史归档项，未记录原始路径）"
         : $"原始路径：{SourcePath}";
 
+    /// <summary>复选框：是否被勾选（用于批量操作）</summary>
+    [ObservableProperty]
     private bool _isSelected;
 
-    /// <summary>复选框：是否被勾选（用于批量操作）</summary>
-    public bool IsSelected
-    {
-        get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
-    }
-
     /// <summary>
-    /// 阶段3：异步加载磁盘图片缩略图（后台解码，不卡 UI）。
-    /// 文件不存在或已有缩略图（示例色块）时直接跳过。
+    /// 异步加载磁盘图片缩略图（后台解码，不卡 UI）。
+    /// 文件不存在或已有缩略图时直接跳过。
     /// </summary>
     public async Task LoadThumbnailAsync()
     {
@@ -75,10 +72,9 @@ public class ScreenshotItem : BaseViewModel
             return; // 解码失败（损坏/格式不支持）静默跳过
         }
 
-        var thumb = decoded;
-        if (thumb == null) return;
+        if (decoded == null) return;
 
         // 回 UI 线程更新属性，界面自动刷新
-        await Dispatcher.UIThread.InvokeAsync(() => Thumbnail = thumb);
+        await Dispatcher.UIThread.InvokeAsync(() => Thumbnail = decoded);
     }
 }

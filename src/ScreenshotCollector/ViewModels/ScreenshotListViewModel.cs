@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using ScreenshotCollector.Services;
@@ -73,25 +74,49 @@ public partial class ScreenshotListViewModel : BaseViewModel
         RebuildGroups();
     }
 
-    /// <summary>批量加载已有截图（程序启动时把归档目录的全部截图加入列表，按传入顺序=时间降序）</summary>
+    /// <summary>批量加载已有截图（程序启动时把归档目录的全部截图加入列表）</summary>
     public void LoadExisting(IEnumerable<ScreenshotItem> items)
     {
-        foreach (var item in items)
+        // 强制在主线程中操作，避免任何跨线程引发的 UI 不渲染问题
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => LoadExisting(items));
+            return;
+        }
+
+        // 清空旧数据
+        AllItems.Clear();
+
+        var list = items.ToList();
+        foreach (var item in list)
         {
             AllItems.Add(item);
             _ = item.LoadThumbnailAsync();
         }
+
         RebuildGroups();
+
+        // 强制通知 UI 刷新
+        OnPropertyChanged(nameof(AllItems));
+        OnPropertyChanged(nameof(IsEmpty));
     }
 
-    /// <summary>新增一条截图记录：存入全部数据源，触发缩略图异步加载，并重建分组。
-    /// （新截图在组内置顶，类似新邮件置顶）
-    /// </summary>
+    /// <summary>新增一条截图记录（新截图在组内置顶）</summary>
     public void Add(ScreenshotItem item)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => Add(item));
+            return;
+        }
+
         AllItems.Insert(0, item);
         _ = item.LoadThumbnailAsync();
         RebuildGroups();
+
+        // 强制通知 UI 刷新
+        OnPropertyChanged(nameof(AllItems));
+        OnPropertyChanged(nameof(IsEmpty));
     }
 
     /// <summary>按【来源 + 搜索词】过滤全部截图，重建四个时间分组</summary>
@@ -101,7 +126,10 @@ public partial class ScreenshotListViewModel : BaseViewModel
 
         var text = (SearchText ?? string.Empty).Trim();
 
-        foreach (var item in AllItems)
+        // 🚀【修复】强制按时间降序排列，保证最新的截图永远在最上面
+        var filteredItems = AllItems.OrderByDescending(i => i.CaptureTime).ToList();
+
+        foreach (var item in filteredItems)
         {
             // 1. 来源过滤（点击左侧菜单）
             if (_sourceFilter != null &&
@@ -119,10 +147,12 @@ public partial class ScreenshotListViewModel : BaseViewModel
                 if (!hit) continue;
             }
 
-            // 3. 按时间归组（新截图在组内置顶）
-            GroupOf(item.CaptureTime).Items.Insert(0, item);
+            // 3. 按时间归组（🚀【修复】使用 Add 而不是 Insert(0)，因为已经是降序遍历）
+            GroupOf(item.CaptureTime).Items.Add(item);
         }
 
+        // 强制通知 UI 刷新绑定
+        OnPropertyChanged(nameof(Groups));
         OnPropertyChanged(nameof(IsEmpty));
     }
 
@@ -240,21 +270,28 @@ public partial class ScreenshotListViewModel : BaseViewModel
         LogService.Info("UI", $"已删除截图：{item.FileName}");
     }
 
-    /// <summary>全选 / 取消全选：全部已勾选时点它=全部取消，否则=全部勾选</summary>
+    /// <summary>全选 / 取消全选：只针对当前界面上可见的截图生效</summary>
     [RelayCommand]
     private void SelectAll()
     {
-        var all = AllItems.ToList();
-        if (all.Count == 0) return;
+        // 🚀【修复】获取当前界面上可见的所有图片（过滤后的），而不是底层的全部数据
+        var visibleItems = Groups.SelectMany(g => g.Items).ToList();
+        if (visibleItems.Count == 0) return;
 
-        var allSelected = all.All(i => i.IsSelected);
-        foreach (var item in all) item.IsSelected = !allSelected;
+        // 如果当前可见的已经全部选中，则执行取消全选；否则执行全选
+        var allSelected = visibleItems.All(i => i.IsSelected);
+
+        foreach (var item in visibleItems)
+        {
+            item.IsSelected = !allSelected;
+        }
     }
 
     /// <summary>批量删除勾选的截图（真实删除本地文件）</summary>
     [RelayCommand]
     private void DeleteSelected()
     {
+        // 🚀 获取所有被勾选的项（全局查找，因为可能有些被勾选了但在其他分组）
         var items = AllItems.Where(i => i.IsSelected).ToList();
         if (items.Count == 0)
         {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -64,10 +65,16 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>模组连接状态检测定时器（每 5 秒探测游戏进程，让状态灯可读）</summary>
     private System.Threading.Timer? _gameCheckTimer;
 
+    // ---- 🚀 高阶防卡顿：后台批量更新缓冲队列 ----
+    private readonly List<ScreenshotItem> _pendingItems = new();
+    private readonly object _pendingLock = new object();
+    private bool _isFlushScheduled = false;
+
     // ---- 模组连接三态灯：红=断开 / 黄=等待 / 绿=已连接（真实状态驱动，非装饰） ----
-    public IBrush ConnRedBrush { get; private set; }
-    public IBrush ConnYellowBrush { get; private set; }
-    public IBrush ConnGreenBrush { get; private set; }
+    // 🚀 修复：赋予默认值（透明），消除 Nullable 警告，后续由 UpdateConnectionLights 刷新真实状态
+    public IBrush ConnRedBrush { get; private set; } = Brushes.Transparent;
+    public IBrush ConnYellowBrush { get; private set; } = Brushes.Transparent;
+    public IBrush ConnGreenBrush { get; private set; } = Brushes.Transparent;
     public string ConnStatusText { get; private set; } = "等待模组连接";
 
     private static readonly IBrush _redBrush = new SolidColorBrush(Color.Parse("#EF4444"));
@@ -157,11 +164,19 @@ public partial class MainViewModel : BaseViewModel
 
     public MainViewModel()
     {
-        // 日志服务：清理7天前旧日志，记录启动
+        // 1. 日志服务：清理7天前旧日志，记录启动
         LogService.Cleanup(7);
         LogService.Info("App", "程序启动");
 
-        // 归档根目录与设置保持一致；保存设置时同步回写
+        // 2. 🚥【关键修复】必须最先初始化状态灯，否则后面的服务事件找不到目标，状态灯会永远卡在“启动中”
+        StatusItems.Add(new ServiceStatusItem { Name = "天际线游戏截图", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
+        StatusItems.Add(new ServiceStatusItem { Name = "编辑器快照", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
+        StatusItems.Add(new ServiceStatusItem { Name = "微信 / QQ 剪贴板", Level = ServiceStatusLevel.Yellow, StatusText = "等待窗口显示" });
+        StatusItems.Add(new ServiceStatusItem { Name = "天际线模组通信", Level = ServiceStatusLevel.Yellow, StatusText = "等待模组连接" });
+        StatusItems.Add(new ServiceStatusItem { Name = "全局热键", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
+        UpdateConnectionLights(ServiceStatusLevel.Yellow, "等待模组连接");
+
+        // 3. 归档根目录与设置保持一致；保存设置时同步回写
         Archive.SaveRootFolder = Settings.SaveRootFolder;
         Settings.OnSaveRequested = () =>
         {
@@ -169,27 +184,30 @@ public partial class MainViewModel : BaseViewModel
             LogService.Cleanup((int)(Settings.LogRetentionDays ?? 7));
         };
 
-        // 归档成功 → 实时添加到界面列表（截图后立刻出现在中间列表，无需重启）。
-        // 注意：事件可能来自后台线程（FolderWatcher 文件监听），统一 Post 到 UI 线程更新列表，
-        // 否则 ObservableCollection 跨线程修改会导致界面不渲染（"抓到了但列表不显示"）。
+        // 4. 🚀 归档成功 → 推入缓冲队列
         Archive.Archived += (sourcePath, destPath, category, time) =>
         {
             var fileName = System.IO.Path.GetFileName(destPath);
-            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            var newItem = new ScreenshotItem
             {
-                Screenshots.Add(new ScreenshotItem
-                {
-                    FileName = fileName,
-                    FilePath = destPath,
-                    SourcePath = sourcePath ?? string.Empty,
-                    SourceLabel = category,
-                    CaptureTime = time
-                });
-                LogService.Info("App", $"列表新增截图：{fileName}（{category}，原始 {sourcePath ?? "未知"}）");
-            });
+                FileName = fileName,
+                FilePath = destPath,
+                SourcePath = sourcePath ?? string.Empty,
+                SourceLabel = category,
+                CaptureTime = time
+            };
+
+            lock (_pendingLock)
+            {
+                _pendingItems.Add(newItem);
+                if (_isFlushScheduled) return;
+                _isFlushScheduled = true;
+            }
+
+            Avalonia.Threading.Dispatcher.UIThread.Post(FlushToUI, Avalonia.Threading.DispatcherPriority.Background);
         };
 
-        // 文件夹监听：注册默认截图目录（天际线/编辑器快照），实时更新状态灯
+        // 5. 文件夹监听
         FolderWatcher = new FolderWatcherService(Archive);
         FolderWatcher.FolderStatusChanged += (category, found, path) =>
         {
@@ -199,13 +217,11 @@ public partial class MainViewModel : BaseViewModel
                 "编辑器快照" => "编辑器快照",
                 _ => category
             };
-            SetStatus(name,
-                found ? ServiceStatusLevel.Green : ServiceStatusLevel.Red,
-                found ? "监听中" : "未找到目录");
+            SetStatus(name, found ? ServiceStatusLevel.Green : ServiceStatusLevel.Red, found ? "监听中" : "未找到目录");
         };
         FolderWatcher.RegisterDefaultFolders();
 
-        // Socket 通信：接收天际线模组推送，收到快照时状态灯变绿并显示最近时间
+        // 6. Socket 通信
         Socket = new SocketGameService(Archive);
         Socket.SnapshotReceived += (category, time) =>
         {
@@ -217,8 +233,7 @@ public partial class MainViewModel : BaseViewModel
             SetStatus("天际线模组通信", ServiceStatusLevel.Red, "端口被占用");
         }
 
-        // 模组连接状态智能刷新：每 5 秒检测游戏进程是否存在，
-        // 未连接时给出明确原因（游戏未启动 / 游戏运行中等待模组），避免像卡死的假象
+        // 7. 模组连接状态智能刷新定时器
         _gameCheckTimer = new System.Threading.Timer(_ =>
         {
             var running = System.Diagnostics.Process.GetProcessesByName("Cities").Length > 0;
@@ -231,32 +246,65 @@ public partial class MainViewModel : BaseViewModel
             });
         }, null, 3000, 5000);
 
-        // 初始状态灯：全部等待启动 → 由上方各服务启动事件刷新
-        StatusItems.Add(new ServiceStatusItem { Name = "天际线游戏截图", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
-        StatusItems.Add(new ServiceStatusItem { Name = "编辑器快照", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
-        StatusItems.Add(new ServiceStatusItem { Name = "微信 / QQ 剪贴板", Level = ServiceStatusLevel.Yellow, StatusText = "等待窗口显示" });
-        StatusItems.Add(new ServiceStatusItem { Name = "天际线模组通信", Level = ServiceStatusLevel.Yellow, StatusText = "等待模组连接" });
-        StatusItems.Add(new ServiceStatusItem { Name = "全局热键", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
-        UpdateConnectionLights(ServiceStatusLevel.Yellow, "等待模组连接");
-
-        SelectedMenu = MenuItems[0];
-        // 演示数据已移除：列表现在实时展示真实抓取结果（抓图后自动出现在这里）
-        // LoadSampleData();
-
-        // 启动时加载归档目录中的全部历史截图（按时间降序，今天/昨天/本周/更早分组展示）
+        // 8. 🚀【关键修复】先加载历史数据，确保 UI 首次渲染时有数据
         LoadAllArchived();
 
-        // 启动补扫：游戏源目录（Screenshots/Snapshots）里尚未归档的最新图片直接补录
-        // （解决"桌面端启动前已生成的游戏截图/快照看不到"，如模组未启用或桌面端晚于截图启动）
+        // 9. 启动补扫
         SweepGameSources();
+
+        // 10. 🚀【关键修复】最后设置选中菜单，避免触发 ApplyFilter 时列表为空导致白屏
+        SelectedMenu = MenuItems[0];
     }
 
-    /// <summary>
-    /// 启动补扫：扫描游戏源目录里尚未归档的最新图片，直接补录进列表；
-    /// 已归档的（按目标文件存在性判定，幂等不会重复复制）则回填真实原始路径。
-    /// 天际线 F12 截图（Screenshots 平铺）+ 编辑器快照（Snapshots\&lt;UUID&gt;\ 递归，按文件名分三分类）。
-    /// 只取每个分类最近 20 个，避免每次启动全量扫描拖慢。
-    /// </summary>
+    /// <summary>将缓冲区中的截图批量安全地添加到 UI 列表</summary>
+    private void FlushToUI()
+    {
+        List<ScreenshotItem> itemsToAdd;
+        lock (_pendingLock)
+        {
+            itemsToAdd = _pendingItems.ToList();
+            _pendingItems.Clear();
+            _isFlushScheduled = false;
+        }
+
+        foreach (var item in itemsToAdd)
+        {
+            try
+            {
+                // 🚀【关键修复】加入列表的同时，立即触发异步加载缩略图。不加载缩略图很多UI会导致不显示。
+                _ = item.LoadThumbnailAsync();
+
+                Screenshots.Add(item);
+                LogService.Info("App", $"列表新增截图：{item.FileName}（{item.SourceLabel}，原始 {item.SourcePath}）");
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("App", $"添加截图到列表失败：{item.FileName}，{ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>更新一个状态灯条目（线程安全：自动调度到 UI 线程）</summary>
+    public void SetStatus(string name, ServiceStatusLevel level, string text)
+    {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => SetStatus(name, level, text));
+            return;
+        }
+
+        foreach (var item in StatusItems)
+        {
+            if (item.Name == name)
+            {
+                item.Level = level;
+                item.StatusText = text;
+                if (name == "天际线模组通信") UpdateConnectionLights(level, text);
+                return;
+            }
+        }
+    }
+
     private void SweepGameSources()
     {
         try
@@ -268,7 +316,6 @@ public partial class MainViewModel : BaseViewModel
 
             int added = 0, backfilled = 0;
 
-            // 天际线 F12 截图（Screenshots 平铺，取最新 20 张）
             if (System.IO.Directory.Exists(screenshots))
             {
                 foreach (var f in System.IO.Directory.GetFiles(screenshots, "*.png")
@@ -287,11 +334,10 @@ public partial class MainViewModel : BaseViewModel
                 }
             }
 
-            // 编辑器快照（Snapshots\<UUID>\ 递归，最新 20 个目录，按文件名分三分类）
             if (System.IO.Directory.Exists(snapshots))
             {
                 foreach (var dir in System.IO.Directory.GetDirectories(snapshots)
-                    .OrderByDescending(System.IO.Directory.GetLastWriteTime).Take(20))
+                    .OrderByDescending(System.IO.File.GetLastWriteTime).Take(20))
                 {
                     foreach (var f in System.IO.Directory.GetFiles(dir, "*.png"))
                     {
@@ -321,7 +367,6 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
-    /// <summary>已归档条目回填真实原始路径：列表条目 SourcePath 为空时填入，并补写 .src 元数据（下次启动直接恢复）</summary>
     private bool BackfillSourcePath(string destPath, string sourcePath)
     {
         foreach (var item in Screenshots.AllItems)
@@ -336,7 +381,6 @@ public partial class MainViewModel : BaseViewModel
             }
         }
 
-        // 列表里没有该条目时也补写元数据，下次启动加载即可恢复
         if (!System.IO.File.Exists(destPath + ".src"))
         {
             FileArchiveService.WriteSrc(destPath, sourcePath);
@@ -344,7 +388,6 @@ public partial class MainViewModel : BaseViewModel
         return false;
     }
 
-    /// <summary>按文件名前缀分类快照：thumbnail→缩略图，tooltip→提示图，其余→主图快照</summary>
     private static string ClassifySnapshot(string path)
     {
         var name = System.IO.Path.GetFileName(path);
@@ -353,7 +396,6 @@ public partial class MainViewModel : BaseViewModel
         return "编辑器快照";
     }
 
-    /// <summary>扫描保存根目录，把全部已归档截图加入列表（按时间降序）</summary>
     private void LoadAllArchived()
     {
         try
@@ -372,18 +414,21 @@ public partial class MainViewModel : BaseViewModel
             var items = new List<ScreenshotItem>(files.Count);
             foreach (var file in files)
             {
-                // 分类 = 根目录下的第一层文件夹名（如 微信、天际线、QQ）
                 var rel = System.IO.Path.GetRelativePath(Archive.SaveRootFolder, file);
                 var category = rel.Split(System.IO.Path.DirectorySeparatorChar).FirstOrDefault() ?? "未知";
 
-                items.Add(new ScreenshotItem
+                var item = new ScreenshotItem
                 {
                     FileName = System.IO.Path.GetFileName(file),
                     FilePath = file,
-                    SourcePath = FileArchiveService.ReadSrc(file) ?? string.Empty, // 恢复持久化的原始真实路径
+                    SourcePath = FileArchiveService.ReadSrc(file) ?? string.Empty,
                     SourceLabel = category,
                     CaptureTime = TryParseTime(System.IO.Path.GetFileName(file)) ?? System.IO.File.GetLastWriteTime(file)
-                });
+                };
+
+                // 🚀【关键修复】历史图片载入时，立即触发缩略图加载
+                _ = item.LoadThumbnailAsync();
+                items.Add(item);
             }
 
             Screenshots.LoadExisting(items);
@@ -398,7 +443,6 @@ public partial class MainViewModel : BaseViewModel
         }
     }
 
-    /// <summary>从文件名解析时间戳（20261023_124132_微信.png → 2026-10-23 12:41:32），失败返回 null</summary>
     private static DateTime? TryParseTime(string fileName)
     {
         var m = System.Text.RegularExpressions.Regex.Match(fileName, @"^(\d{8})_(\d{6})");
@@ -409,43 +453,23 @@ public partial class MainViewModel : BaseViewModel
             ? t : null;
     }
 
-    /// <summary>更新一个状态灯条目</summary>
-    public void SetStatus(string name, ServiceStatusLevel level, string text)
-    {
-        foreach (var item in StatusItems)
-        {
-            if (item.Name == name)
-            {
-                item.Level = level;
-                item.StatusText = text;
-                if (name == "天际线模组通信") UpdateConnectionLights(level, text);
-                return;
-            }
-        }
-    }
-
-    /// <summary>左侧菜单切换：设置页或按来源过滤截图列表</summary>
     partial void OnSelectedMenuChanged(MenuItem? value)
     {
         if (value == null) return;
 
-        // 设置菜单 → 切换到设置面板
         if (value.IsSettings)
         {
             CurrentPage = MainPage.Settings;
             return;
         }
 
-        // 普通菜单 → 回到列表页，并按来源过滤
         CurrentPage = MainPage.ScreenshotList;
         Screenshots.ApplyFilter(value.SourceLabel);
     }
 
-    /// <summary>暂停 / 继续捕获</summary>
     [RelayCommand]
     private void TogglePause() => IsPaused = !IsPaused;
 
-    /// <summary>打开保存目录（真实实现：explorer 打开归档根目录）</summary>
     [RelayCommand]
     private void OpenSaveFolder()
     {
@@ -463,72 +487,5 @@ public partial class MainViewModel : BaseViewModel
         {
             LogService.Error("UI", $"打开保存目录失败：{ex.Message}");
         }
-    }
-
-    // ---------- 演示用：生成五条示例数据，覆盖四个分组与多个来源 ----------
-
-    private void LoadSampleData()
-    {
-        var now = DateTime.Now;
-
-        // 今天
-        Screenshots.Add(new ScreenshotItem
-        {
-            FileName = "20261023_102211_WeChat.png",
-            FilePath = @"D:\Screenshots\WeChat\20261023_102211_WeChat.png",
-            SourceLabel = "微信",
-            CaptureTime = now.AddHours(-1),
-            Thumbnail = MakeThumb("#10B981")
-        });
-
-        // 昨天
-        Screenshots.Add(new ScreenshotItem
-        {
-            FileName = "20261022_090805_QQ.png",
-            FilePath = @"D:\Screenshots\QQ\20261022_090805_QQ.png",
-            SourceLabel = "QQ",
-            CaptureTime = now.AddDays(-1).AddHours(3),
-            Thumbnail = MakeThumb("#3B82F6")
-        });
-
-        // 本周（非今天/昨天）
-        Screenshots.Add(new ScreenshotItem
-        {
-            FileName = "20261020_095512_Steam.png",
-            FilePath = @"D:\Screenshots\SteamOverlay\20261020_095512_Steam.png",
-            SourceLabel = "Steam",
-            CaptureTime = now.AddDays(-3),
-            Thumbnail = MakeThumb("#F59E0B")
-        });
-
-        // 更早（上周）
-        Screenshots.Add(new ScreenshotItem
-        {
-            FileName = "20261018_093012_CitiesSkylines.png",
-            FilePath = @"D:\Screenshots\CitiesSkylines_Game\20261018_093012_CitiesSkylines.png",
-            SourceLabel = "天际线",
-            CaptureTime = now.AddDays(-6),
-            Thumbnail = MakeThumb("#8B5CF6")
-        });
-
-        // 更早（上上周）
-        Screenshots.Add(new ScreenshotItem
-        {
-            FileName = "20261013_091047_Snapshot.png",
-            FilePath = @"D:\Screenshots\CitiesSkylines_Snapshot\20261013_091047_Snapshot.png",
-            SourceLabel = "编辑器快照",
-            CaptureTime = now.AddDays(-12),
-            Thumbnail = MakeThumb("#EF4444")
-        });
-    }
-
-    /// <summary>生成一块纯色小图，作为示例缩略图（演示用）</summary>
-    private static Bitmap MakeThumb(string hex)
-    {
-        var color = Color.Parse(hex);
-        var rtb = new RenderTargetBitmap(new PixelSize(64, 40));
-        using var ctx = rtb.CreateDrawingContext();
-        ctx.FillRectangle(new SolidColorBrush(color), new Rect(0, 0, 64, 40));
-        return rtb;
     }
 }
