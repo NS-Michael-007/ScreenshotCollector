@@ -64,6 +64,30 @@ public partial class MainViewModel : BaseViewModel
     /// <summary>模组连接状态检测定时器（每 5 秒探测游戏进程，让状态灯可读）</summary>
     private System.Threading.Timer? _gameCheckTimer;
 
+    // ---- 模组连接三态灯：红=断开 / 黄=等待 / 绿=已连接（真实状态驱动，非装饰） ----
+    public IBrush ConnRedBrush { get; private set; }
+    public IBrush ConnYellowBrush { get; private set; }
+    public IBrush ConnGreenBrush { get; private set; }
+    public string ConnStatusText { get; private set; } = "等待模组连接";
+
+    private static readonly IBrush _redBrush = new SolidColorBrush(Color.Parse("#EF4444"));
+    private static readonly IBrush _yellowBrush = new SolidColorBrush(Color.Parse("#F59E0B"));
+    private static readonly IBrush _greenBrush = new SolidColorBrush(Color.Parse("#10B981"));
+    private static readonly IBrush _inactiveBrush = new SolidColorBrush(Color.Parse("#CBD5E1"));
+
+    /// <summary>按模组连接真实状态刷新三色灯（与「天际线模组通信」状态灯同一状态源）</summary>
+    private void UpdateConnectionLights(ServiceStatusLevel level, string text)
+    {
+        ConnRedBrush = level == ServiceStatusLevel.Red ? _redBrush : _inactiveBrush;
+        ConnYellowBrush = level == ServiceStatusLevel.Yellow ? _yellowBrush : _inactiveBrush;
+        ConnGreenBrush = level == ServiceStatusLevel.Green ? _greenBrush : _inactiveBrush;
+        ConnStatusText = text;
+        OnPropertyChanged(nameof(ConnRedBrush));
+        OnPropertyChanged(nameof(ConnYellowBrush));
+        OnPropertyChanged(nameof(ConnGreenBrush));
+        OnPropertyChanged(nameof(ConnStatusText));
+    }
+
     /// <summary>主窗口显示后调用：启动需要窗口对象的捕获服务与托盘</summary>
     public void StartCaptureServices(Window window)
     {
@@ -207,6 +231,7 @@ public partial class MainViewModel : BaseViewModel
         StatusItems.Add(new ServiceStatusItem { Name = "微信 / QQ 剪贴板", Level = ServiceStatusLevel.Yellow, StatusText = "等待窗口显示" });
         StatusItems.Add(new ServiceStatusItem { Name = "天际线模组通信", Level = ServiceStatusLevel.Yellow, StatusText = "等待模组连接" });
         StatusItems.Add(new ServiceStatusItem { Name = "全局热键", Level = ServiceStatusLevel.Yellow, StatusText = "启动中" });
+        UpdateConnectionLights(ServiceStatusLevel.Yellow, "等待模组连接");
 
         SelectedMenu = MenuItems[0];
         // 演示数据已移除：列表现在实时展示真实抓取结果（抓图后自动出现在这里）
@@ -280,6 +305,7 @@ public partial class MainViewModel : BaseViewModel
             {
                 item.Level = level;
                 item.StatusText = text;
+                if (name == "天际线模组通信") UpdateConnectionLights(level, text);
                 return;
             }
         }

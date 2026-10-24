@@ -105,6 +105,21 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
+                        <!-- 模组连接三态灯：红=断开 / 黄=等待 / 绿=已连接（真实状态驱动，非装饰） -->
+                        <StackPanel Spacing="3" Margin="0,6,0,2">
+                            <TextBlock Text="模组连接（红断 · 黄待 · 绿连）" FontSize="10" FontWeight="SemiBold" Foreground="#94A3B8"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <Border Width="10" Height="10" CornerRadius="5"
+                                        Background="{Binding ConnRedBrush}" ToolTip.Tip="断开连接"/>
+                                <Border Width="10" Height="10" CornerRadius="5"
+                                        Background="{Binding ConnYellowBrush}" ToolTip.Tip="等待连接"/>
+                                <Border Width="10" Height="10" CornerRadius="5"
+                                        Background="{Binding ConnGreenBrush}" ToolTip.Tip="已连接"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding ConnStatusText}" FontSize="10" Foreground="#94A3B8"
+                                       TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+
                         <Button Content="&#x25B6; 继续捕获" Background="#475569" Foreground="White"
                                 HorizontalAlignment="Stretch" Command="{Binding TogglePauseCommand}"/>
                         <Button Content="&#x1F4C1; 打开保存目录" Background="Transparent" Foreground="#CBD5E1"
