@@ -65,6 +65,10 @@ public class FileArchiveService
 
             // 5. 复制图片（保留原文件，安全不破坏来源）
             File.Copy(sourcePath, dest);
+
+            // 6. 持久化原始路径（dest.src 同名字文件，供下次启动加载历史时恢复真实路径）
+            WriteSrc(dest, sourcePath);
+
             LogService.Info("Archive", $"已归档：{dest}（来源 {sourceCategory}，原始 {sourcePath}）");
             Archived?.Invoke(sourcePath, dest, sourceCategory, capturedAt);
             return dest;
@@ -72,6 +76,46 @@ public class FileArchiveService
         catch (Exception ex)
         {
             LogService.Error("Archive", $"归档失败 {sourcePath}：{ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 计算归档目标路径（不归档、不建目录）：根\分类\日期\时间戳_分类.扩展名。
+    /// 供启动补扫做幂等判定（目标已存在 = 已归档，跳过复制避免重复）。
+    /// </summary>
+    public string GetDestPath(string sourcePath, string sourceCategory, DateTime capturedAt)
+    {
+        var folder = Path.Combine(SaveRootFolder, sourceCategory, capturedAt.ToString("yyyy-MM-dd"));
+        var ext = Path.GetExtension(sourcePath);
+        return Path.Combine(folder, $"{capturedAt:yyyyMMdd_HHmmss}_{sourceCategory}{ext}");
+    }
+
+    /// <summary>持久化原始路径元数据（dest 旁同名 .src 文本文件，UTF-8 无 BOM）</summary>
+    public static void WriteSrc(string destPath, string sourcePath)
+    {
+        try
+        {
+            File.WriteAllText(destPath + ".src", sourcePath ?? string.Empty);
+        }
+        catch
+        {
+            // 元数据写失败不影响归档本身
+        }
+    }
+
+    /// <summary>读取原始路径元数据；无 .src 或读取失败返回 null</summary>
+    public static string? ReadSrc(string destPath)
+    {
+        try
+        {
+            var src = destPath + ".src";
+            if (!File.Exists(src)) return null;
+            var text = File.ReadAllText(src);
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+        catch
+        {
             return null;
         }
     }

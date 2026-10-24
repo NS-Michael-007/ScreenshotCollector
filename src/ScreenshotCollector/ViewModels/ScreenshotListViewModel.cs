@@ -226,6 +226,7 @@ public partial class ScreenshotListViewModel : BaseViewModel
         try
         {
             if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
+            if (File.Exists(item.FilePath + ".src")) File.Delete(item.FilePath + ".src"); // 原始路径元数据一并删除
         }
         catch (Exception ex)
         {
@@ -266,6 +267,7 @@ public partial class ScreenshotListViewModel : BaseViewModel
             try
             {
                 if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
+                if (File.Exists(item.FilePath + ".src")) File.Delete(item.FilePath + ".src"); // 原始路径元数据一并删除
             }
             catch (Exception ex)
             {

@@ -20,9 +20,9 @@ public class ScreenshotItem : BaseViewModel
 
     /// <summary>
     /// 来源原始路径（如游戏目录 Snapshots\&lt;UUID&gt;\snapshot.png）。
-    /// 归档时记录；启动时加载的历史归档项无法反推，为空字符串。
+    /// 归档时记录；启动补扫按 .src 元数据恢复；无法追溯时为空字符串。
     /// </summary>
-    public string SourcePath { get; init; } = string.Empty;
+    public string SourcePath { get; set; } = string.Empty;
 
     /// <summary>捕获时间</summary>
     public DateTime CaptureTime { get; init; } = DateTime.Now;

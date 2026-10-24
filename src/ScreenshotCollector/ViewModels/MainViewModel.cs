@@ -246,9 +246,10 @@ public partial class MainViewModel : BaseViewModel
     }
 
     /// <summary>
-    /// 启动补扫：扫描游戏源目录里尚未归档的最新图片，直接补录进列表。
+    /// 启动补扫：扫描游戏源目录里尚未归档的最新图片，直接补录进列表；
+    /// 已归档的（按目标文件存在性判定，幂等不会重复复制）则回填真实原始路径。
     /// 天际线 F12 截图（Screenshots 平铺）+ 编辑器快照（Snapshots\&lt;UUID&gt;\ 递归，按文件名分三分类）。
-    /// 只取每个分类最近 20 个，避免每次启动全量扫描拖慢；已归档过的（按原始路径去重）自动跳过。
+    /// 只取每个分类最近 20 个，避免每次启动全量扫描拖慢。
     /// </summary>
     private void SweepGameSources()
     {
@@ -259,12 +260,7 @@ public partial class MainViewModel : BaseViewModel
             var screenshots = System.IO.Path.Combine(csDir, "Screenshots");
             var snapshots = System.IO.Path.Combine(csDir, "Snapshots");
 
-            // 已归档过的原始路径集合（去重依据）
-            var existing = new HashSet<string>(
-                Screenshots.AllItems.Select(s => s.SourcePath).Where(p => p.Length > 0),
-                StringComparer.OrdinalIgnoreCase);
-
-            int added = 0;
+            int added = 0, backfilled = 0;
 
             // 天际线 F12 截图（Screenshots 平铺，取最新 20 张）
             if (System.IO.Directory.Exists(screenshots))
@@ -272,10 +268,15 @@ public partial class MainViewModel : BaseViewModel
                 foreach (var f in System.IO.Directory.GetFiles(screenshots, "*.png")
                     .OrderByDescending(System.IO.File.GetLastWriteTime).Take(20))
                 {
-                    if (!existing.Contains(f))
+                    var time = System.IO.File.GetLastWriteTime(f);
+                    var dest = Archive.GetDestPath(f, "天际线", time);
+                    if (System.IO.File.Exists(dest))
                     {
-                        var dest = Archive.Archive(f, "天际线", System.IO.File.GetLastWriteTime(f));
-                        if (dest != null) { existing.Add(f); added++; }
+                        if (BackfillSourcePath(dest, f)) backfilled++;
+                    }
+                    else
+                    {
+                        if (Archive.Archive(f, "天际线", time) != null) added++;
                     }
                 }
             }
@@ -288,19 +289,53 @@ public partial class MainViewModel : BaseViewModel
                 {
                     foreach (var f in System.IO.Directory.GetFiles(dir, "*.png"))
                     {
-                        if (existing.Contains(f)) continue;
-                        var dest = Archive.Archive(f, ClassifySnapshot(f), System.IO.File.GetLastWriteTime(f));
-                        if (dest != null) { existing.Add(f); added++; }
+                        var cat = ClassifySnapshot(f);
+                        var time = System.IO.File.GetLastWriteTime(f);
+                        var dest = Archive.GetDestPath(f, cat, time);
+                        if (System.IO.File.Exists(dest))
+                        {
+                            if (BackfillSourcePath(dest, f)) backfilled++;
+                        }
+                        else
+                        {
+                            if (Archive.Archive(f, cat, time) != null) added++;
+                        }
                     }
                 }
             }
 
-            if (added > 0) LogService.Info("App", $"启动补扫：补录游戏源目录截图 {added} 张");
+            if (added > 0 || backfilled > 0)
+            {
+                LogService.Info("App", $"启动补扫：新归档 {added} 张，回填原始路径 {backfilled} 张");
+            }
         }
         catch (Exception ex)
         {
             LogService.Error("App", $"启动补扫失败：{ex.Message}");
         }
+    }
+
+    /// <summary>已归档条目回填真实原始路径：列表条目 SourcePath 为空时填入，并补写 .src 元数据（下次启动直接恢复）</summary>
+    private bool BackfillSourcePath(string destPath, string sourcePath)
+    {
+        foreach (var item in Screenshots.AllItems)
+        {
+            if (string.Equals(item.FilePath, destPath, StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrEmpty(item.SourcePath))
+            {
+                item.SourcePath = sourcePath;
+                FileArchiveService.WriteSrc(destPath, sourcePath);
+                LogService.Info("App", $"回填原始路径：{System.IO.Path.GetFileName(destPath)} → {sourcePath}");
+                return true;
+            }
+        }
+
+        // 列表里没有该条目时也补写元数据，下次启动加载即可恢复
+        if (!System.IO.File.Exists(destPath + ".src"))
+        {
+            FileArchiveService.WriteSrc(destPath, sourcePath);
+        }
+        return false;
     }
 
     /// <summary>按文件名前缀分类快照：thumbnail→缩略图，tooltip→提示图，其余→主图快照</summary>
@@ -339,6 +374,7 @@ public partial class MainViewModel : BaseViewModel
                 {
                     FileName = System.IO.Path.GetFileName(file),
                     FilePath = file,
+                    SourcePath = FileArchiveService.ReadSrc(file) ?? string.Empty, // 恢复持久化的原始真实路径
                     SourceLabel = category,
                     CaptureTime = TryParseTime(System.IO.Path.GetFileName(file)) ?? System.IO.File.GetLastWriteTime(file)
                 });
