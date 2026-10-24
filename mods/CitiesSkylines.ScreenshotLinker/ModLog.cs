@@ -26,8 +26,8 @@ namespace CitiesSkylines.ScreenshotLinker
             {
                 if (_logPath == null)
                 {
-                    string dllDir = PathUtil.DirName(
-                        new Uri(typeof(ModLog).Assembly.CodeBase).LocalPath);
+                    string dllDir = PathUtil.ModDirectory();
+                    if (dllDir.Length == 0) dllDir = Environment.CurrentDirectory;
                     _logPath = PathUtil.Join(dllDir, "ScreenshotLinker.log");
                 }
                 File.AppendAllText(_logPath, string.Format("{0:yyyy-MM-dd HH:mm:ss} [{1}] {2}{3}",

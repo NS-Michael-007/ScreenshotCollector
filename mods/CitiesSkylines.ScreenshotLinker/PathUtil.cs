@@ -35,5 +35,36 @@ namespace CitiesSkylines.ScreenshotLinker
             if (idx < 0) return string.Empty;
             return path.Substring(0, idx);
         }
+
+        /// <summary>
+        /// 取当前模组 DLL 所在目录。
+        /// 优先 Assembly.Location（游戏 Mono 用 LoadFile/LoadFrom 加载时是文件路径）；
+        /// 回退 CodeBase（个别加载方式下 Location 为空）；两者都不可用返回空串（调用方兜底当前目录）。
+        /// 修复：游戏某 Mono 加载路径下 CodeBase 为空/抛异常，导致日志与配置写不出去（静默 catch 吞掉）。
+        /// </summary>
+        public static string ModDirectory()
+        {
+            try
+            {
+                var asm = typeof(PathUtil).Assembly;
+                string loc = asm.Location;
+                if (!string.IsNullOrEmpty(loc))
+                {
+                    string dir = DirName(loc);
+                    if (dir.Length > 0) return dir;
+                }
+                string cb = asm.CodeBase;
+                if (!string.IsNullOrEmpty(cb))
+                {
+                    string dir = DirName(new Uri(cb).LocalPath);
+                    if (dir.Length > 0) return dir;
+                }
+            }
+            catch
+            {
+                // 任一路径取不到都不影响模组主流程
+            }
+            return string.Empty;
+        }
     }
 }

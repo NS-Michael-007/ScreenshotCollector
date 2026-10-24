@@ -182,6 +182,26 @@ namespace CitiesSkylines.ScreenshotLinker
                     ScreenshotLinkerUI.SetOpacity(value);
                     ModLog.Info("按钮不透明度已设为 " + (int)value + "%");
                 });
+            // 数值回显/直改输入框：部分游戏版本的 AddSlider 不渲染数值标签，这里保证数值可见、可直接输入
+            helper.AddTextfield(
+                "当前不透明度（%，可直接输入 30-100）",
+                cfg.GetOpacityPercent().ToString(),
+                text => { },
+                text =>
+                {
+                    int v;
+                    if (int.TryParse(text, out v) && v >= 30 && v <= 100)
+                    {
+                        cfg.OpacityPercent = v;
+                        cfg.Save();
+                        ScreenshotLinkerUI.SetOpacity((float)v);
+                        ModLog.Info("按钮不透明度已设为 " + v + "%");
+                    }
+                    else
+                    {
+                        ModLog.Warn("不透明度无效（需 30-100）：" + text);
+                    }
+                });
 
             helper.AddSpace(8);
             helper.AddButton("保存配置（重启模组生效）", () =>
