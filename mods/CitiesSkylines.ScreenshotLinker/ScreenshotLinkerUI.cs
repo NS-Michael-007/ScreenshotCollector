@@ -123,14 +123,16 @@ namespace CitiesSkylines.ScreenshotLinker
 
         private void OnMouseDownInstance(UIComponent component, UIMouseEventParameter eventParam)
         {
-            // 仅右键进入拖拽；左键保留给点击启动
-            if (eventParam.buttons != UIMouseButton.Right)
-            {
-                return;
-            }
-            _dragRightButton = true;
+            // 每次按下都重置拖拽状态（关键修复）：若上次右键在按钮外松开，_dragging 会残留为 true，
+            // 导致之后左键点击被误判为"拖拽松手"而拦截启动。重置后左键点击始终可用。
+            _dragRightButton = false;
             _dragging = false;
             _pressPos = eventParam.position; // 按下时鼠标相对按钮的偏移
+            // 仅右键进入拖拽模式；左键保留给点击启动
+            if (eventParam.buttons == UIMouseButton.Right)
+            {
+                _dragRightButton = true;
+            }
         }
 
         private void OnMouseMoveInstance(UIComponent component, UIMouseEventParameter eventParam)
