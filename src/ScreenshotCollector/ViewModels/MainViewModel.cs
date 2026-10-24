@@ -239,6 +239,77 @@ public partial class MainViewModel : BaseViewModel
 
         // 启动时加载归档目录中的全部历史截图（按时间降序，今天/昨天/本周/更早分组展示）
         LoadAllArchived();
+
+        // 启动补扫：游戏源目录（Screenshots/Snapshots）里尚未归档的最新图片直接补录
+        // （解决"桌面端启动前已生成的游戏截图/快照看不到"，如模组未启用或桌面端晚于截图启动）
+        SweepGameSources();
+    }
+
+    /// <summary>
+    /// 启动补扫：扫描游戏源目录里尚未归档的最新图片，直接补录进列表。
+    /// 天际线 F12 截图（Screenshots 平铺）+ 编辑器快照（Snapshots\&lt;UUID&gt;\ 递归，按文件名分三分类）。
+    /// 只取每个分类最近 20 个，避免每次启动全量扫描拖慢；已归档过的（按原始路径去重）自动跳过。
+    /// </summary>
+    private void SweepGameSources()
+    {
+        try
+        {
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var csDir = System.IO.Path.Combine(local, "Colossal Order", "Cities_Skylines");
+            var screenshots = System.IO.Path.Combine(csDir, "Screenshots");
+            var snapshots = System.IO.Path.Combine(csDir, "Snapshots");
+
+            // 已归档过的原始路径集合（去重依据）
+            var existing = new HashSet<string>(
+                Screenshots.AllItems.Select(s => s.SourcePath).Where(p => p.Length > 0),
+                StringComparer.OrdinalIgnoreCase);
+
+            int added = 0;
+
+            // 天际线 F12 截图（Screenshots 平铺，取最新 20 张）
+            if (System.IO.Directory.Exists(screenshots))
+            {
+                foreach (var f in System.IO.Directory.GetFiles(screenshots, "*.png")
+                    .OrderByDescending(System.IO.File.GetLastWriteTime).Take(20))
+                {
+                    if (!existing.Contains(f))
+                    {
+                        var dest = Archive.Archive(f, "天际线", System.IO.File.GetLastWriteTime(f));
+                        if (dest != null) { existing.Add(f); added++; }
+                    }
+                }
+            }
+
+            // 编辑器快照（Snapshots\<UUID>\ 递归，最新 20 个目录，按文件名分三分类）
+            if (System.IO.Directory.Exists(snapshots))
+            {
+                foreach (var dir in System.IO.Directory.GetDirectories(snapshots)
+                    .OrderByDescending(System.IO.Directory.GetLastWriteTime).Take(20))
+                {
+                    foreach (var f in System.IO.Directory.GetFiles(dir, "*.png"))
+                    {
+                        if (existing.Contains(f)) continue;
+                        var dest = Archive.Archive(f, ClassifySnapshot(f), System.IO.File.GetLastWriteTime(f));
+                        if (dest != null) { existing.Add(f); added++; }
+                    }
+                }
+            }
+
+            if (added > 0) LogService.Info("App", $"启动补扫：补录游戏源目录截图 {added} 张");
+        }
+        catch (Exception ex)
+        {
+            LogService.Error("App", $"启动补扫失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>按文件名前缀分类快照：thumbnail→缩略图，tooltip→提示图，其余→主图快照</summary>
+    private static string ClassifySnapshot(string path)
+    {
+        var name = System.IO.Path.GetFileName(path);
+        if (name.StartsWith("thumbnail", StringComparison.OrdinalIgnoreCase)) return "编辑器缩略图";
+        if (name.StartsWith("tooltip", StringComparison.OrdinalIgnoreCase)) return "编辑器提示图";
+        return "编辑器快照";
     }
 
     /// <summary>扫描保存根目录，把全部已归档截图加入列表（按时间降序）</summary>
