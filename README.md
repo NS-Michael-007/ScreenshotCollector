@@ -27,7 +27,7 @@
 ## 📦 桌面端（软件）使用教程
 
 ### 1. 下载
-- 从本仓库 **Releases** 页面下载 `ScreenshotCollector-发布版-win-x64.zip`（单文件 EXE，**已内置 .NET 8 运行时，双击即用，无需安装**）
+- 从本仓库 **Releases** 页面下载 `ScreenshotCollector-Release-win-x64.zip`（单文件 EXE，**已内置 .NET 8 运行时，双击即用，无需安装**）
 - 或自行从源码构建（见下文「从源码构建」）
 
 ### 2. 启动
@@ -128,7 +128,7 @@ ScreenshotCollector/
 
 - **v1.0.0**（本版）：完整双端功能——剪贴板抓取、游戏监听三分类、真实路径、幂等补扫、分组管理、分享删除、托盘后台、状态灯、模组浮动按钮
 - 发布资产：
-  - `ScreenshotCollector-发布版-win-x64.zip`（桌面端单文件版，39.3MB，免装运行环境）
+  - `ScreenshotCollector-Release-win-x64.zip`（桌面端单文件版，39.3MB，免装运行环境）
   - 源码（本仓库，GPLv3）
 
 > 💡 桌面端 EXE 无法随 Steam 工坊分发（工坊仅接受游戏模组 DLL），因此桌面端通过 Releases 下载，工坊页面附下载链接。
