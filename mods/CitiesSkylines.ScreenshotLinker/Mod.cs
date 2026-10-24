@@ -1,4 +1,7 @@
 using System;
+using System.Reflection;
+using UnityEngine;
+using ColossalFramework.UI;
 using HarmonyLib;
 using ICities;
 
@@ -179,21 +182,11 @@ namespace CitiesSkylines.ScreenshotLinker
                     cfg.Save();
                 });
 
-            // 按钮不透明度滑块（0-100%，"中心填充百分比"；回调立即应用到游戏内按钮）
-            helper.AddSlider("按钮不透明度（%）", 30f, 100f, 5f,
-                (float)cfg.GetOpacityPercent(),
-                value =>
-                {
-                    cfg.OpacityPercent = (int)value;
-                    cfg.Save();
-                    ScreenshotLinkerUI.SetOpacity(value);
-                    ModLog.Info("按钮不透明度已设为 " + (int)value + "%");
-                });
-            // 数值回显/直改输入框：部分游戏版本的 AddSlider 不渲染数值标签，这里保证数值可见、可直接输入
+            // 不透明度数值：输入框（数值可见可改）；标题**红色**并实时显示当前值（滑块已按用户要求移除）
+            UILabel opacityTitle = null;
             helper.AddTextfield(
-                "当前不透明度（%，可直接输入 30-100）",
+                "当前不透明度（%）",
                 cfg.GetOpacityPercent().ToString(),
-                text => { },
                 text =>
                 {
                     int v;
@@ -202,13 +195,36 @@ namespace CitiesSkylines.ScreenshotLinker
                         cfg.OpacityPercent = v;
                         cfg.Save();
                         ScreenshotLinkerUI.SetOpacity((float)v);
+                        if (!ReferenceEquals(opacityTitle, null))
+                        {
+                            try { opacityTitle.text = "当前不透明度（%）：" + v; } catch { }
+                        }
                         ModLog.Info("按钮不透明度已设为 " + v + "%");
                     }
                     else
                     {
                         ModLog.Warn("不透明度无效（需 30-100）：" + text);
                     }
-                });
+                },
+                text => { });
+
+            // 反射定位该输入框的标题 UILabel → 红色字体（游戏设置 API 无颜色接口；失败自动降级不影响功能）
+            try
+            {
+                UIComponent root = FindHelperRoot(helper);
+                if (!ReferenceEquals(root, null))
+                {
+                    opacityTitle = FindTitleLabel(root, "当前不透明度（%）");
+                    if (!ReferenceEquals(opacityTitle, null))
+                    {
+                        opacityTitle.textColor = new Color32(239, 68, 68, 255); // 红色
+                    }
+                }
+            }
+            catch
+            {
+                opacityTitle = null;
+            }
 
             helper.AddSpace(8);
             helper.AddButton("保存配置（重启模组生效）", () =>
@@ -278,6 +294,50 @@ namespace CitiesSkylines.ScreenshotLinker
                 ModLog.Error("Harmony 补丁失败（降级目录监听）：" + ex.Message);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// 反射取出设置面板的根容器（UIComponent）。
+        /// 游戏设置 API（UIHelperBase）不暴露容器句柄，这里通过反射找实现类里类型为 UIComponent 的字段。
+        /// 兼容 Mono .NET 3.5：GetFields/GetValue/IsAssignableFrom 均为 .NET 1.x API。
+        /// </summary>
+        private static UIComponent FindHelperRoot(UIHelperBase helper)
+        {
+            try
+            {
+                Type t = helper.GetType();
+                FieldInfo[] fields = t.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    if (typeof(UIComponent).IsAssignableFrom(fields[i].FieldType))
+                    {
+                        UIComponent v = fields[i].GetValue(helper) as UIComponent;
+                        if (!ReferenceEquals(v, null)) return v;
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return null;
+        }
+
+        /// <summary>在容器子控件里找指定文本的 UILabel（前缀匹配，兼容标题被更新过的情况）</summary>
+        private static UILabel FindTitleLabel(UIComponent root, string text)
+        {
+            try
+            {
+                System.Collections.Generic.IList<UIComponent> comps = root.components; // 该版本子控件列表
+                for (int i = 0; i < comps.Count; i++)
+                {
+                    UILabel l = comps[i] as UILabel;
+                    if (!ReferenceEquals(l, null) && l.text.StartsWith(text)) return l;
+                }
+            }
+            catch
+            {
+            }
+            return null;
         }
     }
 }
