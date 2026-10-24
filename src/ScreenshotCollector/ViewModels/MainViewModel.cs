@@ -169,18 +169,24 @@ public partial class MainViewModel : BaseViewModel
             LogService.Cleanup((int)(Settings.LogRetentionDays ?? 7));
         };
 
-        // 归档成功 → 实时添加到界面列表（截图后立刻出现在中间列表，无需重启）
+        // 归档成功 → 实时添加到界面列表（截图后立刻出现在中间列表，无需重启）。
+        // 注意：事件可能来自后台线程（FolderWatcher 文件监听），统一 Post 到 UI 线程更新列表，
+        // 否则 ObservableCollection 跨线程修改会导致界面不渲染（"抓到了但列表不显示"）。
         Archive.Archived += (sourcePath, destPath, category, time) =>
         {
-            Screenshots.Add(new ScreenshotItem
+            var fileName = System.IO.Path.GetFileName(destPath);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                FileName = System.IO.Path.GetFileName(destPath),
-                FilePath = destPath,
-                SourcePath = sourcePath ?? string.Empty,
-                SourceLabel = category,
-                CaptureTime = time
+                Screenshots.Add(new ScreenshotItem
+                {
+                    FileName = fileName,
+                    FilePath = destPath,
+                    SourcePath = sourcePath ?? string.Empty,
+                    SourceLabel = category,
+                    CaptureTime = time
+                });
+                LogService.Info("App", $"列表新增截图：{fileName}（{category}，原始 {sourcePath ?? "未知"}）");
             });
-            LogService.Info("App", $"列表新增截图：{System.IO.Path.GetFileName(destPath)}（{category}，原始 {sourcePath ?? "未知"}）");
         };
 
         // 文件夹监听：注册默认截图目录（天际线/编辑器快照），实时更新状态灯
