@@ -26,6 +26,9 @@ namespace CitiesSkylines.ScreenshotLinker
         /// <summary>游戏内按钮文字（最长 8 个字符）</summary>
         public string ButtonText { get; set; }
 
+        /// <summary>游戏内按钮不透明度（0-100%，设置页滑块控制）</summary>
+        public int OpacityPercent { get; set; }
+
         /// <summary>桌面端程序默认路径（与桌面端工程构建输出一致）</summary>
         public const string DefaultDesktopAppPath = @"C:\Users\NAN SHENG CSUR\source\repos\ScreenshotCollector\src\ScreenshotCollector\bin\Debug\net8.0\ScreenshotCollector.exe";
 
@@ -42,6 +45,7 @@ namespace CitiesSkylines.ScreenshotLinker
             UseFolderWatch = true;
             DesktopAppPath = DefaultDesktopAppPath;
             ButtonText = "启动截图收集器";
+            OpacityPercent = 100;
         }
 
         /// <summary>取桌面端程序路径：空则用默认路径</summary>
@@ -59,6 +63,13 @@ namespace CitiesSkylines.ScreenshotLinker
             if (ReferenceEquals(t, null) || t.Length == 0) return "启动截图收集器";
             if (t.Length > ButtonTextMaxLength) return t.Substring(0, ButtonTextMaxLength);
             return t;
+        }
+
+        /// <summary>取按钮不透明度（%）：非法值（≤0 或 &gt;100）回退 100</summary>
+        public int GetOpacityPercent()
+        {
+            if (OpacityPercent <= 0 || OpacityPercent > 100) return 100;
+            return OpacityPercent;
         }
 
         public static void EnsureLoaded()

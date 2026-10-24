@@ -172,6 +172,17 @@ namespace CitiesSkylines.ScreenshotLinker
                     cfg.Save();
                 });
 
+            // 按钮不透明度滑块（0-100%，"中心填充百分比"；回调立即应用到游戏内按钮）
+            helper.AddSlider("按钮不透明度（%）", 30f, 100f, 5f,
+                (float)cfg.GetOpacityPercent(),
+                value =>
+                {
+                    cfg.OpacityPercent = (int)value;
+                    cfg.Save();
+                    ScreenshotLinkerUI.SetOpacity(value);
+                    ModLog.Info("按钮不透明度已设为 " + (int)value + "%");
+                });
+
             helper.AddSpace(8);
             helper.AddButton("保存配置（重启模组生效）", () =>
             {
