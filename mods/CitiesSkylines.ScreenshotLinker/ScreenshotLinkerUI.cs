@@ -30,8 +30,8 @@ namespace CitiesSkylines.ScreenshotLinker
         // ---- 拖拽状态（无锁，全部在 Unity 主线程） ----
         private bool _dragRightButton;  // 右键按住中（仅右键拖拽移动）
         private bool _dragging;         // 本次按压已判定为拖拽
+        private bool _rightWasDown;     // 上一帧右键是否按住（检测"刚按下"沿）
         private Vector3 _lastMousePx;   // 上一帧鼠标屏幕像素位置（UnityEngine.Input.mousePosition）
-        private bool _lastMousePxSet;
 
         /// <summary>拖动判定阈值（像素）：小于此距离视为点击，大于等于视为拖拽</summary>
         private const float DragThreshold = 3f;
@@ -120,8 +120,8 @@ namespace CitiesSkylines.ScreenshotLinker
             btn.hoveredBgSprite = "ButtonMenuHovered";
             btn.pressedBgSprite = "ButtonMenuPressed";
 
-            // 右键拖拽：按下记录起点（Update 每帧轮询鼠标位置做增量移动，方向与鼠标一致）
-            btn.eventMouseDown += OnMouseDownInstance;
+            // 左键点击启动；右键拖拽完全由 Update 每帧轮询 Input.mousePosition 处理（见 UpdateDrag），
+            // 不依赖按钮的 mouseDown 事件（反射确认该版本按钮事件对右键不可靠）
             btn.eventClick += OnLaunchClickedInstance;
 
             // 默认位置：屏幕右上角，留 16 像素边距（UIView 用 fixedWidth 基准宽度定位）
@@ -130,58 +130,61 @@ namespace CitiesSkylines.ScreenshotLinker
             ModLog.Info("已在游戏界面创建按钮（180×30，右键拖拽）：" + text);
         }
 
-        private void OnMouseDownInstance(UIComponent component, UIMouseEventParameter eventParam)
-        {
-            // 每次按下都重置拖拽状态（关键修复）：保证左键点击启动始终可用
-            _dragRightButton = false;
-            _dragging = false;
-            // 仅右键进入拖拽模式；左键保留给点击启动
-            if (eventParam.buttons == UIMouseButton.Right)
-            {
-                _dragRightButton = true;
-                _lastMousePx = Input.mousePosition; // 屏幕像素坐标（左下原点，Y 向上）
-                _lastMousePxSet = true;
-            }
-        }
-
         /// <summary>
-        /// 每帧轮询拖拽（绕开 UI 事件捕获限制）：
-        /// - 用 UnityEngine.Input.mousePosition（屏幕像素，Y 向上）的增量移动按钮，
-        ///   方向天然与鼠标一致（不会出现"鼠标上移按钮下移"）；
-        /// - 右键在按钮外松开也能被检测到（GetMouseButton(1)==false），状态不会残留；
-        /// - 屏幕像素增量 ÷ UI 缩放比 → 换算到 UIView 基准坐标（relativePosition）。
+        /// 每帧轮询拖拽（纯轮询方案，完全绕开 UI 事件捕获限制）：
+        /// - 右键"刚按下"且鼠标在按钮矩形内 → 进入拖拽；
+        /// - 拖拽中按屏幕像素增量移动按钮：**X 同向、Y 反向**
+        ///   （Input.mousePosition 屏幕像素 Y 向上，UIView relativePosition Y 向下，必须翻转，
+        ///   否则会出现"鼠标上移按钮下移"的反向问题——上一版漏了翻转）；
+        /// - 右键在任何位置松开都会被检测到（GetMouseButton(1)==false），状态不残留；
+        /// - 屏幕像素增量 ÷ UI 缩放比 → 换算到 UIView 基准坐标。
         /// </summary>
         private void UpdateDrag()
         {
-            if (!_dragRightButton) return;
+            if (_button == null) return;
+
+            bool rightDown = Input.GetMouseButton(1);
+            bool wasDown = _rightWasDown;
+            _rightWasDown = rightDown;
 
             // 右键已松开（无论在哪松开）：结束拖拽，杜绝状态残留
-            if (!Input.GetMouseButton(1))
+            if (!rightDown)
             {
                 _dragRightButton = false;
                 _dragging = false;
                 return;
             }
 
+            // 右键刚按下的这一帧：鼠标落在按钮矩形内才进入拖拽
+            if (!wasDown)
+            {
+                _dragRightButton = IsMouseOverButton();
+                _dragging = false;
+                if (_dragRightButton)
+                {
+                    _lastMousePx = Input.mousePosition;
+                }
+                return;
+            }
+
+            if (!_dragRightButton) return;
+
+            Vector3 mp = Input.mousePosition;
+            float scale = (float)Screen.width / (float)_view.fixedWidth;
+            if (scale <= 0f) scale = 1f;
+            float dx = (mp.x - _lastMousePx.x) / scale;   // X 同向
+            float dy = -(mp.y - _lastMousePx.y) / scale;  // Y 翻转（屏幕像素 Y 向上 → UIView Y 向下）
+
             if (!_dragging)
             {
                 // 未判定拖拽前，先按位移阈值判断
-                Vector2 delta = new Vector2(
-                    Input.mousePosition.x - _lastMousePx.x,
-                    Input.mousePosition.y - _lastMousePx.y);
-                if (Mathf.Abs(delta.x) < DragThreshold && Mathf.Abs(delta.y) < DragThreshold)
+                if (Mathf.Abs(dx * scale) < DragThreshold && Mathf.Abs(dy * scale) < DragThreshold)
                 {
-                    _lastMousePx = Input.mousePosition;
+                    _lastMousePx = mp;
                     return;
                 }
                 _dragging = true;
             }
-
-            // 屏幕像素增量 → UIView 基准坐标增量（UI 缩放比 = 实际屏幕宽 / 基准宽）
-            float scale = (float)Screen.width / (float)_view.fixedWidth;
-            if (scale <= 0f) scale = 1f;
-            float dx = (Input.mousePosition.x - _lastMousePx.x) / scale;
-            float dy = (Input.mousePosition.y - _lastMousePx.y) / scale;
 
             Vector3 p = _button.relativePosition + new Vector3(dx, dy);
             // 限制在屏幕范围内，避免拖出可视区找不回来
@@ -189,7 +192,20 @@ namespace CitiesSkylines.ScreenshotLinker
             p.y = Mathf.Clamp(p.y, 0f, (float)_view.fixedHeight - _button.height);
             _button.relativePosition = p;
 
-            _lastMousePx = Input.mousePosition;
+            _lastMousePx = mp;
+        }
+
+        /// <summary>鼠标屏幕像素是否落在按钮矩形内（换算：基准坐标×缩放，Y 翻转）</summary>
+        private bool IsMouseOverButton()
+        {
+            Vector3 mp = Input.mousePosition;
+            float scale = (float)Screen.width / (float)_view.fixedWidth;
+            if (scale <= 0f) scale = 1f;
+            float sx = _button.relativePosition.x * scale;
+            float sy = (float)Screen.height - (_button.relativePosition.y + _button.height) * scale;
+            float w = _button.width * scale;
+            float h = _button.height * scale;
+            return mp.x >= sx && mp.x <= sx + w && mp.y >= sy && mp.y <= sy + h;
         }
 
         private void OnLaunchClickedInstance(UIComponent component, UIMouseEventParameter eventParam)
@@ -209,7 +225,7 @@ namespace CitiesSkylines.ScreenshotLinker
             _view = null;
             _dragRightButton = false;
             _dragging = false;
-            _lastMousePxSet = false;
+            _rightWasDown = false;
         }
     }
 }

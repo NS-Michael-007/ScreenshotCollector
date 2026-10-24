@@ -22,6 +22,12 @@ namespace CitiesSkylines.ScreenshotLinker
         private bool _harmonyActive;
         private UnityEngine.GameObject _uiObject;
 
+        /// <summary>构造函数：DLL 一旦被游戏加载并创建 IUserMod 实例即留痕（用于确认加载/启用状态）</summary>
+        public Mod()
+        {
+            ModLog.Info("模组实例已创建（DLL 加载成功，等待启用）");
+        }
+
         /// <summary>游戏内模组名称（内容管理器中显示，独立存在）</summary>
         public string Name => "截图自动收集器联动（ScreenshotLinker）";
 
@@ -31,6 +37,7 @@ namespace CitiesSkylines.ScreenshotLinker
         /// <summary>模组启用：按配置加载配置并启动对应通道</summary>
         public void OnEnabled()
         {
+            ModLog.Info("模组已启用（OnEnabled）");
             ScreenshotLinkerConfig.EnsureLoaded();
             var cfg = ScreenshotLinkerConfig.Current;
             SocketSender.Port = cfg.Port;

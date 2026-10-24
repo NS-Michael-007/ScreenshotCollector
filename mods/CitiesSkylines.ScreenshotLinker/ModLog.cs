@@ -24,19 +24,40 @@ namespace CitiesSkylines.ScreenshotLinker
             // 绝不允许日志机制反过来拖垮模组加载。
             try
             {
-                if (_logPath == null)
-                {
-                    string dllDir = PathUtil.ModDirectory();
-                    if (dllDir.Length == 0) dllDir = Environment.CurrentDirectory;
-                    _logPath = PathUtil.Join(dllDir, "ScreenshotLinker.log");
-                }
-                File.AppendAllText(_logPath, string.Format("{0:yyyy-MM-dd HH:mm:ss} [{1}] {2}{3}",
-                    DateTime.Now, level, msg, Environment.NewLine));
+                if (_logPath == null) _logPath = ResolveLogPath();
+                File.AppendAllText(_logPath, BuildLine(level, msg));
             }
             catch
             {
-                // 日志失败不影响主流程
+                // 主路径写失败 → 兜底写用户 AppData（至少留痕，不阻断模组）
+                try
+                {
+                    string fallback = PathUtil.Join(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "ScreenshotLinker.log");
+                    File.AppendAllText(fallback, BuildLine(level, msg));
+                }
+                catch
+                {
+                    // 日志失败不影响主流程
+                }
             }
+        }
+
+        private static string BuildLine(string level, string msg)
+        {
+            return string.Format("{0:yyyy-MM-dd HH:mm:ss} [{1}] {2}{3}",
+                DateTime.Now, level, msg, Environment.NewLine);
+        }
+
+        /// <summary>日志路径：模组 DLL 同目录；取不到时回退用户 AppData 根目录</summary>
+        private static string ResolveLogPath()
+        {
+            string dllDir = PathUtil.ModDirectory();
+            if (dllDir.Length > 0) return PathUtil.Join(dllDir, "ScreenshotLinker.log");
+            return PathUtil.Join(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "ScreenshotLinker.log");
         }
     }
 }
