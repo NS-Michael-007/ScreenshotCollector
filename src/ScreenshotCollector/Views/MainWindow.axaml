@@ -4,18 +4,12 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:ScreenshotCollector.ViewModels"
         xmlns:controls="using:ScreenshotCollector.Views.Controls"
+        xmlns:converters="using:Avalonia.Data.Converters"
         mc:Ignorable="d"
         x:Class="ScreenshotCollector.Views.MainWindow"
         Title="截图自动收集器"
-        Width="1100"
-        Height="700"
-        MinWidth="900"
-        MinHeight="560"
+        Width="1100" Height="700" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterScreen">
-
-    <Window.DataContext>
-        <vm:MainViewModel/>
-    </Window.DataContext>
 
     <Window.Styles>
         <Style Selector="ListBox#SideMenu ListBoxItem">
@@ -35,44 +29,37 @@
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
 
-        <Style Selector="ScrollViewer#ShotScroll ListBox ListBoxItem">
+        <Style Selector="ListBox#ShotList ListBoxItem">
             <Setter Property="Padding" Value="8,6"/>
             <Setter Property="Margin" Value="0,1"/>
             <Setter Property="CornerRadius" Value="4"/>
         </Style>
-        <Style Selector="ScrollViewer#ShotScroll ListBox ListBoxItem:selected /template/ ContentPresenter">
+        <Style Selector="ListBox#ShotList ListBoxItem:selected /template/ ContentPresenter">
             <Setter Property="Background" Value="#E8F0FE"/>
         </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="Auto,*">
-
         <!-- 顶部通栏 -->
         <Border Grid.Row="0" Background="#44546A" Padding="12,0">
             <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="&#x1F5BC;" FontSize="20" VerticalAlignment="Center"/>
-                    <TextBlock Text="截图自动收集器" FontSize="16" FontWeight="SemiBold"
-                               Foreground="White" VerticalAlignment="Center"/>
+                    <TextBlock Text="截图自动收集器" FontSize="16" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <TextBox Grid.Column="1" Width="300" HorizontalAlignment="Center"
-                         Watermark="搜索截图文件名 / 来源 / 时间"
-                         Text="{Binding Screenshots.SearchText}"/>
+                <TextBox Grid.Column="1" Width="300" HorizontalAlignment="Center" Watermark="搜索截图文件名 / 来源 / 时间" Text="{Binding Screenshots.SearchText}"/>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10">
-                    <ToggleButton Content="暂停捕获" IsChecked="{Binding IsPaused}"
-                                  Foreground="White" Background="Transparent"/>
-                    <Button Content="打开目录" Foreground="White" Background="Transparent"
-                            Command="{Binding OpenSaveFolderCommand}"/>
+                    <ToggleButton Content="暂停捕获" IsChecked="{Binding IsPaused}" Foreground="White" Background="Transparent"/>
+                    <Button Content="打开目录" Foreground="White" Background="Transparent" Command="{Binding OpenSaveFolderCommand}"/>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <!-- ==================== 主体三栏：180（菜单）+ 360（列表）+ *（预览/设置） ==================== -->
+        <!-- ==================== 主体三栏 ==================== -->
         <Grid Grid.Row="1" ColumnDefinitions="180,360,*">
-
-            <!-- ========== 左栏：深色侧边菜单 ========== -->
+            <!-- 左栏：深色侧边菜单 -->
             <Border Grid.Column="0" Background="#334155">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="10,12">
@@ -81,13 +68,9 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:ServiceStatusItem">
                                     <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
-                                        <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4"
-                                                Background="{Binding StatusBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="11"
-                                                   Foreground="#CBD5E1" VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" FontSize="11"
-                                                   Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                        <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4" Background="{Binding StatusBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="11" Foreground="#CBD5E1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -96,29 +79,27 @@
                         <StackPanel Spacing="3" Margin="0,6,0,2">
                             <TextBlock Text="模组连接（红断 · 黄待 · 绿连）" FontSize="10" FontWeight="SemiBold" Foreground="#94A3B8"/>
                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                <Border Width="10" Height="10" CornerRadius="5" Background="{Binding ConnRedBrush}" ToolTip.Tip="断开连接"/>
-                                <Border Width="10" Height="10" CornerRadius="5" Background="{Binding ConnYellowBrush}" ToolTip.Tip="等待连接"/>
-                                <Border Width="10" Height="10" CornerRadius="5" Background="{Binding ConnGreenBrush}" ToolTip.Tip="已连接"/>
+                                <Border Width="10" Height="10" CornerRadius="5" Background="{Binding ConnRedBrush}" 
+                                        IsVisible="{Binding IsConnRed}" ToolTip.Tip="断开连接"/>
+                                <Border Width="10" Height="10" CornerRadius="5" Background="{Binding ConnYellowBrush}" 
+                                        IsVisible="{Binding IsConnYellow}" ToolTip.Tip="正在寻找游戏..."/>
+                                <Border Width="10" Height="10" CornerRadius="5" Background="{Binding ConnGreenBrush}" 
+                                        IsVisible="{Binding IsConnGreen}" ToolTip.Tip="已连接"/>
                             </StackPanel>
                             <TextBlock Text="{Binding ConnStatusText}" FontSize="10" Foreground="#94A3B8" TextTrimming="CharacterEllipsis"/>
                         </StackPanel>
 
-                        <Button Content="&#x25B6; 继续捕获" Background="#475569" Foreground="White"
-                                HorizontalAlignment="Stretch" Command="{Binding TogglePauseCommand}"/>
-                        <Button Content="&#x1F4C1; 打开保存目录" Background="Transparent" Foreground="#CBD5E1"
-                                HorizontalAlignment="Stretch" Command="{Binding OpenSaveFolderCommand}"/>
+                        <Button Content="&#x25B6; 继续捕获" Background="#475569" Foreground="White" HorizontalAlignment="Stretch" Command="{Binding TogglePauseCommand}"/>
+                        <Button Content="&#x1F4C1; 打开保存目录" Background="Transparent" Foreground="#CBD5E1" HorizontalAlignment="Stretch" Command="{Binding OpenSaveFolderCommand}"/>
                     </StackPanel>
 
-                    <ListBox x:Name="SideMenu" Background="Transparent" BorderThickness="0"
-                             Margin="10,12"
-                             SelectedItem="{Binding SelectedMenu}"
-                             ItemsSource="{Binding MenuItems}">
+                    <ListBox x:Name="SideMenu" Background="Transparent" BorderThickness="0" Margin="10,12" 
+                             SelectedItem="{Binding SelectedMenu}" ItemsSource="{Binding MenuItems}">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:MenuItem">
                                 <StackPanel Margin="0,3">
                                     <TextBlock Text="{Binding DisplayName}"/>
-                                    <TextBlock Text="{Binding SubText}" FontSize="10" Foreground="#94A3B8"
-                                               IsVisible="{Binding HasSubText}" Margin="0,1,0,0"/>
+                                    <TextBlock Text="{Binding SubText}" FontSize="10" Foreground="#94A3B8" IsVisible="{Binding HasSubText}" Margin="0,1,0,0"/>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -126,135 +107,148 @@
                 </DockPanel>
             </Border>
 
-            <!-- ========== 中栏：截图列表（固定 360px） ========== -->
-            <Border Grid.Column="1" Background="#FFFFFF"
-                    BorderBrush="#E5E7EB" BorderThickness="0,0,1,0"
-                    IsVisible="{Binding IsListVisible}">
+            <!-- 中栏：截图列表 -->
+            <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E5E7EB" BorderThickness="0,0,1,0" IsVisible="{Binding IsListVisible}">
                 <Grid RowDefinitions="Auto,*">
                     <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="14,12,14,6">
                         <TextBlock Grid.Column="0" Text="截图列表" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <Button Grid.Column="1" Content="全选" FontSize="11" Padding="10,4" Margin="0,0,6,0"
-                                Command="{Binding Screenshots.SelectAllCommand}" Background="#E0E7FF" Foreground="#4F46E5"/>
-                        <Button Grid.Column="2" Content="删除所选" FontSize="11" Padding="10,4"
-                                Command="{Binding Screenshots.DeleteSelectedCommand}" Background="#FEE2E2" Foreground="#EF4444"/>
+                        <Button Grid.Column="1" Content="全选" FontSize="11" Padding="10,4" Margin="0,0,6,0" Command="{Binding Screenshots.SelectAllCommand}" Background="#E0E7FF" Foreground="#4F46E5"/>
+                        <Button Grid.Column="2" Content="删除所选" FontSize="11" Padding="10,4" Command="{Binding Screenshots.DeleteSelectedCommand}" Background="#FEE2E2" Foreground="#EF4444"/>
                     </Grid>
 
-                    <ScrollViewer x:Name="ShotScroll" Grid.Row="1" Padding="0,0,0,8">
-                        <StackPanel>
-                            <StackPanel IsVisible="{Binding Screenshots.IsEmpty}" Margin="0,40,0,0" Spacing="6">
-                                <TextBlock Text="&#x1F4F7;" FontSize="36" HorizontalAlignment="Center" Foreground="#CBD5E1"/>
-                                <TextBlock Text="暂无截图" FontSize="13" HorizontalAlignment="Center" Foreground="#9CA3AF"/>
-                                <TextBlock Text="天际线 Shift+F12 / Steam F12 / 微信 Alt+A / QQ Ctrl+Alt+A 截图后自动出现在这里"
-                                           FontSize="11" HorizontalAlignment="Center" Foreground="#C4CCD6"/>
-                            </StackPanel>
-
-                            <ItemsControl ItemsSource="{Binding Screenshots.Groups}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:ScreenshotGroup">
-                                        <StackPanel Margin="0,4" IsVisible="{Binding HasItems}">
-                                            <ToggleButton Command="{Binding ToggleExpandCommand}"
-                                                          Background="Transparent" BorderThickness="0"
-                                                          Padding="0" HorizontalAlignment="Left" Margin="10,8,0,4">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="&#x25BE;" FontSize="10" Foreground="#9CA3AF"
-                                                               VerticalAlignment="Center" IsVisible="{Binding IsExpanded}"/>
-                                                    <TextBlock Text="&#x25B8;" FontSize="10" Foreground="#9CA3AF"
-                                                               VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}"/>
-                                                    <TextBlock Text="{Binding GroupTitle}" FontSize="12" FontWeight="SemiBold"
-                                                               Foreground="#6B7280" VerticalAlignment="Center"/>
-                                                    <TextBlock Text="{Binding Items.Count, StringFormat={}{0} 条}" FontSize="11"
-                                                               Foreground="#B0B7C3" VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </ToggleButton>
-
-                                            <ListBox ItemsSource="{Binding Items}"
-                                                     Background="Transparent" BorderThickness="0"
-                                                     SelectedItem="{Binding $parent[ItemsControl].DataContext.Screenshots.SelectedItem}"
-                                                     IsVisible="{Binding IsExpanded}"
-                                                     VerticalAlignment="Top"
-                                                     ScrollViewer.VerticalScrollBarVisibility="Disabled">
-                                                <ListBox.ItemTemplate>
-                                                    <DataTemplate x:DataType="vm:ScreenshotItem">
-                                                        <Grid ColumnDefinitions="Auto,56,*">
-                                                            <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsSelected}"/>
-                                                            <Border Grid.Column="1" Width="50" Height="32" Background="#F1F5F9" CornerRadius="3"
-                                                                    Margin="0,0,8,0" ClipToBounds="True">
-                                                                <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"/>
-                                                            </Border>
-                                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
-                                                                <TextBlock Text="{Binding FileName}" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                    <TextBlock Text="{Binding SourceLabel}" FontSize="11" Foreground="#0078D4"/>
-                                                                    <TextBlock Text="{Binding CaptureTimeText}" FontSize="11" Foreground="#9CA3AF"/>
-                                                                </StackPanel>
-                                                            </StackPanel>
-                                                        </Grid>
-                                                    </DataTemplate>
-                                                </ListBox.ItemTemplate>
-                                            </ListBox>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                    <Grid Grid.Row="1">
+                        <StackPanel IsVisible="{Binding Screenshots.IsEmpty}" Margin="0,40,0,0" Spacing="6">
+                            <TextBlock Text="&#x1F4F7;" FontSize="36" HorizontalAlignment="Center" Foreground="#CBD5E1"/>
+                            <TextBlock Text="暂无截图" FontSize="13" HorizontalAlignment="Center" Foreground="#9CA3AF"/>
+                            <TextBlock Text="天际线 Shift+F12 / Steam F12 / 微信 Alt+A / QQ Ctrl+Alt+A 截图后自动出现在这里" FontSize="11" HorizontalAlignment="Center" Foreground="#C4CCD6"/>
                         </StackPanel>
-                    </ScrollViewer>
+
+                        <ListBox x:Name="ShotList" ItemsSource="{Binding Screenshots.Groups}" Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ScreenshotGroup">
+                                    <StackPanel Margin="0,4" IsVisible="{Binding HasItems}">
+                                        <ToggleButton Command="{Binding ToggleExpandCommand}" Background="Transparent" BorderThickness="0" Padding="0" HorizontalAlignment="Left" Margin="10,8,0,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="&#x25BE;" FontSize="10" Foreground="#9CA3AF" VerticalAlignment="Center" IsVisible="{Binding IsExpanded}"/>
+                                                <TextBlock Text="&#x25B8;" FontSize="10" Foreground="#9CA3AF" VerticalAlignment="Center" IsVisible="{Binding !IsExpanded}"/>
+                                                <TextBlock Text="{Binding GroupTitle}" FontSize="12" FontWeight="SemiBold" Foreground="#6B7280" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Items.Count, StringFormat={}{0} 条}" FontSize="11" Foreground="#B0B7C3" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ToggleButton>
+
+                                        <ListBox ItemsSource="{Binding Items}" Background="Transparent" BorderThickness="0"
+                                                 SelectedItem="{Binding $parent[Window].DataContext.Screenshots.SelectedItem}"
+                                                 IsVisible="{Binding IsExpanded}" VerticalAlignment="Top"
+                                                 ScrollViewer.VerticalScrollBarVisibility="Disabled" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ScreenshotItem">
+                                                    <Grid ColumnDefinitions="Auto,56,*">
+                                                        <CheckBox Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding IsSelected}"/>
+                                                        <Border Grid.Column="1" Width="50" Height="32" Background="#F1F5F9" CornerRadius="3" Margin="0,0,8,0" ClipToBounds="True">
+                                                            <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" RenderOptions.BitmapInterpolationMode="LowQuality"/>
+                                                        </Border>
+                                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                                                            <TextBlock Text="{Binding FileName}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding SourceLabel}" FontSize="11" Foreground="#0078D4"/>
+                                                                <TextBlock Text="{Binding CaptureTimeText}" FontSize="11" Foreground="#9CA3AF"/>
+                                                            </StackPanel>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Border>
 
-            <!-- ========== 右栏：设置面板 / 信封占位 / 大图预览（占据剩余所有宽度 Column="2"） ========== -->
+            <!-- 右栏：设置面板 / 占位 / 预览 -->
             <Grid Grid.Column="2" Background="#F8F9FB">
-
-                <!-- 状态C：设置面板 -->
-                <Grid IsVisible="{Binding IsSettingsVisible}">
+                <!-- 设置面板 -->
+                <Grid IsVisible="{Binding IsSettingsVisible}" Background="#F8F9FB" Panel.ZIndex="1">
                     <ScrollViewer Padding="20">
                         <StackPanel Spacing="14">
                             <TextBlock Text="设置" FontSize="16" FontWeight="SemiBold"/>
-                            <!-- （此处为保留你原有设置的省略，如果你有完整内容，保持原样即可） -->
-                            <Border Background="#FEF2F2" BorderBrush="#FCA5A5" BorderThickness="1" CornerRadius="8" Padding="12">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="使用提示" FontWeight="SemiBold" Foreground="#DC2626"/>
-                                    <TextBlock Text="&#x2022; 需要哪张删哪张：点选单张「删除」，或勾选多张后点「删除所选」" FontSize="12" Foreground="#DC2626" TextWrapping="Wrap"/>
+                            
+                            <Border Background="White" CornerRadius="8" Padding="14" BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="归档设置" FontWeight="SemiBold" Foreground="#374151"/>
+                                    <Grid ColumnDefinitions="120,*">
+                                        <TextBlock Text="保存目录:" VerticalAlignment="Center" Foreground="#6B7280"/>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                            <TextBox Text="{Binding Settings.SaveRootFolder}" IsReadOnly="True" Width="300"/>
+                                            <Button Content="更改..." Command="{Binding Settings.BrowseFolderCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <CheckBox Content="按日期自动创建子文件夹" IsChecked="{Binding Settings.EnableDateSubFolder}"/>
+                                    <CheckBox Content="MD5 去重（相同图片只保存一份）" IsChecked="{Binding Settings.EnableDedupe}"/>
                                 </StackPanel>
                             </Border>
-                            <!-- 你原有的卡片1-8请完整保留在这里 -->
+
+                            <Border Background="White" CornerRadius="8" Padding="14" BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="程序行为" FontWeight="SemiBold" Foreground="#374151"/>
+                                    <CheckBox Content="开机自动启动" IsChecked="{Binding Settings.IsAutoStart}"/>
+                                    <CheckBox Content="捕获到新截图时显示通知" IsChecked="{Binding Settings.ShowCaptureNotice}"/>
+                                    <CheckBox Content="仅捕获微信/QQ前台时的剪贴板" IsChecked="{Binding Settings.FrontWindowCheck}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="White" CornerRadius="8" Padding="14" BorderBrush="#E5E7EB" BorderThickness="1">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="系统信息" FontWeight="SemiBold" Foreground="#374151"/>
+                                    <TextBlock Text="{Binding Settings.Version, StringFormat='当前版本: {0}'}" Foreground="#6B7280"/>
+                                    <TextBlock Text="{Binding Settings.SocketPort, StringFormat='通信端口: {0}'}" Foreground="#6B7280"/>
+                                </StackPanel>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,10,0,0">
+                                <Button Content="保存设置" Padding="20,8" Background="#0078D4" Foreground="White" Command="{Binding Settings.SaveSettingsCommand}"/>
+                                <Button Content="恢复默认" Padding="20,8" Background="#F3F4F6" Foreground="#374151" Command="{Binding Settings.ResetConfigCommand}"/>
+                            </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
 
-                <!-- 状态A+B：未选中 / 预览 -->
-                <Grid IsVisible="{Binding IsListVisible}">
-                    <StackPanel IsVisible="{Binding Screenshots.IsPlaceholderVisible}"
+                <!-- 预览与占位面板 -->
+                <Grid IsVisible="{Binding IsListVisible}" Background="#F8F9FB" Panel.ZIndex="0">
+                    
+                    <!-- 🔥 仅当 SelectedItem 为空 (Null) 时显示占位符 -->
+                    <StackPanel IsVisible="{Binding Screenshots.IsPlaceholderVisible}" 
                                 HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="4">
                         <TextBlock Text="&#x2709;" FontSize="72" Foreground="#CBD5E1" HorizontalAlignment="Center"/>
                         <TextBlock Text="未选中任何截图" FontSize="14" Foreground="#9CA3AF" HorizontalAlignment="Center"/>
-                        <TextBlock Text="从左侧选择来源，点击列表中的截图进行预览"
-                                   FontSize="12" Foreground="#C4CCD6" HorizontalAlignment="Center"/>
+                        <TextBlock Text="从左侧选择来源，点击列表中的截图进行预览" FontSize="12" Foreground="#C4CCD6" HorizontalAlignment="Center"/>
                     </StackPanel>
 
-                    <StackPanel IsVisible="{Binding Screenshots.IsPreviewVisible}" Margin="24" Spacing="12">
-                        <Border Background="White" CornerRadius="8" Padding="10"
-                                BorderBrush="#E5E7EB" BorderThickness="1">
-                            <Image Source="{Binding Screenshots.SelectedItem.Thumbnail}"
-                                   Stretch="Uniform" MaxHeight="420"/>
+                    <!-- 🔥 仅当 SelectedItem 不为空 (NotNull) 时显示详情 -->
+                    <StackPanel IsVisible="{Binding Screenshots.IsPreviewVisible}" 
+                                DataContext="{Binding Screenshots.SelectedItem}" Margin="24" Spacing="12">
+                        <Border Background="White" CornerRadius="8" Padding="10" BorderBrush="#E5E7EB" BorderThickness="1">
+                            <Image Source="{Binding Thumbnail}" Stretch="Uniform" MaxHeight="420" RenderOptions.BitmapInterpolationMode="LowQuality"/>
                         </Border>
 
-                        <Border Background="White" CornerRadius="8" Padding="14"
-                                BorderBrush="#E5E7EB" BorderThickness="1">
+                        <Border Background="White" CornerRadius="8" Padding="14" BorderBrush="#E5E7EB" BorderThickness="1">
                             <StackPanel Spacing="6">
-                                <TextBlock Text="{Binding Screenshots.SelectedItem.FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Screenshots.SelectedItem.FilePath}" FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding Screenshots.SelectedItem.SourcePathDisplay}" FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding FilePath}" FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding SourcePathDisplay}" FontSize="11" Foreground="#9CA3AF" TextWrapping="Wrap"/>
                                 <StackPanel Orientation="Horizontal" Spacing="16">
-                                    <TextBlock Text="{Binding Screenshots.SelectedItem.SourceLabel}" FontSize="12" Foreground="#0078D4"/>
-                                    <TextBlock Text="{Binding Screenshots.SelectedItem.CaptureTimeText}" FontSize="12" Foreground="#6B7280"/>
+                                    <TextBlock Text="{Binding SourceLabel}" FontSize="12" Foreground="#0078D4"/>
+                                    <TextBlock Text="{Binding CaptureTimeText}" FontSize="12" Foreground="#6B7280"/>
                                 </StackPanel>
                                 <WrapPanel Margin="0,8,0,0">
-                                    <Button Content="打开文件位置" Margin="0,0,8,8" Command="{Binding Screenshots.OpenFileLocationCommand}"/>
-                                    <Button Content="打开原始位置" Margin="0,0,8,8" Command="{Binding Screenshots.OpenSourceLocationCommand}"/>
-                                    <Button Content="复制路径" Margin="0,0,8,8" Command="{Binding Screenshots.CopyPathCommand}"/>
-                                    <Button Content="删除" Margin="0,0,8,8" Command="{Binding Screenshots.DeleteCommand}"/>
-                                    <Button Content="&#x1F4E4; 分享到微信" Margin="0,0,8,8" Command="{Binding Screenshots.ShareToWeChatCommand}" Background="#07C160" Foreground="White"/>
-                                    <Button Content="&#x1F4E4; 分享到QQ" Margin="0,0,8,8" Command="{Binding Screenshots.ShareToQQCommand}" Background="#12B7F5" Foreground="White"/>
+                                    <Button Content="打开文件位置" Margin="0,0,8,8" Command="{Binding $parent[Window].DataContext.Screenshots.OpenFileLocationCommand}"/>
+                                    <Button Content="打开原始位置" Margin="0,0,8,8" Command="{Binding $parent[Window].DataContext.Screenshots.OpenSourceLocationCommand}"/>
+                                    <Button Content="复制路径" Margin="0,0,8,8" Command="{Binding $parent[Window].DataContext.Screenshots.CopyPathCommand}"/>
+                                    <Button Content="删除" Margin="0,0,8,8" Command="{Binding $parent[Window].DataContext.Screenshots.DeleteCommand}"/>
+                                    <Button Content="&#x1F4E4; 分享到微信" Margin="0,0,8,8" Command="{Binding $parent[Window].DataContext.Screenshots.ShareToWeChatCommand}" Background="#07C160" Foreground="White"/>
+                                    <Button Content="&#x1F4E4; 分享到QQ" Margin="0,0,8,8" Command="{Binding $parent[Window].DataContext.Screenshots.ShareToQQCommand}" Background="#12B7F5" Foreground="White"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Border>

@@ -1,5 +1,7 @@
 using System;
+using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using ColossalFramework.UI;
 using HarmonyLib;
@@ -7,37 +9,33 @@ using ICities;
 
 namespace CitiesSkylines.ScreenshotLinker
 {
-    /// <summary>
-    /// 模组入口：截图自动收集器 联动端。
-    /// 采用工坊 Harmony 模组框架结构：
-    ///   1) Harmony 初始化并补丁游戏截图入口（反射探测，命中即即时推送）；
-    ///   2) 目录监听兜底（无论补丁是否命中，截图落盘都能推送）。
-    /// 游戏内 F12 截图 / 编辑器快照 → 本地 TCP 23333 推送到桌面端「截图自动收集器」。
-    /// 设置：OnSettingsUI(UIHelperBase) → 显示在游戏「选项 → Mods」页签。
-    /// </summary>
     public class Mod : IUserMod
     {
-        /// <summary>Harmony 实例唯一标识（卸载时用于 UnpatchAll）</summary>
         public const string HarmonyId = "com.wangsiji.screenshotlinker";
-
         private ScreenshotWatcher _watcher;
         private Harmony _harmony;
         private bool _harmonyActive;
         private UnityEngine.GameObject _uiObject;
 
-        /// <summary>构造函数：DLL 一旦被游戏加载并创建 IUserMod 实例即留痕（用于确认加载/启用状态）</summary>
+        private UIHelperBase _currentHelper;
+        private ScreenshotLinkerConfig _currentConfig;
+
         public Mod()
         {
             ModLog.Info("模组实例已创建（DLL 加载成功，等待启用）");
         }
 
-        /// <summary>游戏内模组名称（内容管理器中显示，独立存在）</summary>
-        public string Name => "截图自动收集器联动（ScreenshotLinker）";
+        // 🚀 修复：去掉 => 语法
+        public string Name
+        {
+            get { return "截图自动收集器联动（ScreenshotLinker）"; }
+        }
 
-        /// <summary>描述置空：内容管理器列表只保留模组名称，不显示描述块</summary>
-        public string Description => string.Empty;
+        public string Description
+        {
+            get { return string.Empty; }
+        }
 
-        /// <summary>模组启用：按配置加载配置并启动对应通道</summary>
         public void OnEnabled()
         {
             ModLog.Info("模组已启用（OnEnabled）");
@@ -45,32 +43,13 @@ namespace CitiesSkylines.ScreenshotLinker
             var cfg = ScreenshotLinkerConfig.Current;
             SocketSender.Port = cfg.Port;
 
-            ModLog.Info("配置：端口=" + cfg.Port + "，Harmony补丁=" + cfg.UseHarmonyPatch + "，目录监听=" + cfg.UseFolderWatch);
-
-            // 通道1：Harmony 补丁游戏截图入口（反射探测，类名/方法名不硬编码；可关闭）
-            if (cfg.UseHarmonyPatch)
-            {
-                _harmonyActive = TryPatchScreenshot();
-            }
-            else
-            {
-                ModLog.Info("已按设置关闭 Harmony 补丁通道");
-            }
-
-            // 通道2：目录监听兜底（保证任何情况下都能推送；可关闭）
+            if (cfg.UseHarmonyPatch) _harmonyActive = TryPatchScreenshot();
             if (cfg.UseFolderWatch)
             {
                 if (_watcher == null) _watcher = new ScreenshotWatcher();
                 _watcher.Start();
             }
-            else
-            {
-                ModLog.Info("已按设置关闭目录监听兜底通道");
-            }
 
-            ModLog.Info("模组已启用：Harmony " + (_harmonyActive ? "补丁成功" : "补丁未命中/关闭（目录监听兜底）"));
-
-            // —— 游戏界面「一键启动」按钮 ——
             if (ReferenceEquals(_uiObject, null))
             {
                 try
@@ -78,229 +57,200 @@ namespace CitiesSkylines.ScreenshotLinker
                     _uiObject = new UnityEngine.GameObject("ScreenshotLinkerUIRoot");
                     _uiObject.AddComponent<ScreenshotLinkerUI>();
                     UnityEngine.Object.DontDestroyOnLoad(_uiObject);
-                    ModLog.Info("已挂载游戏内按钮组件");
+                    ModLog.Info("游戏内按钮 UI 挂载成功！");
                 }
                 catch (Exception ex)
                 {
-                    ModLog.Warn("挂载游戏内按钮失败：" + ex.Message);
+                    ModLog.Warn("挂载游戏内按钮失败：" + ex.ToString());
                 }
             }
+
+            bool heartbeatSent = SocketSender.SendHeartbeat();
+            if (heartbeatSent) ModLog.Info("心跳包发送成功，桌面端已接收。");
+            else ModLog.Info("心跳包发送失败（可能桌面端未启动）。");
         }
 
-        /// <summary>模组停用：卸载补丁 + 释放监听</summary>
         public void OnDisabled()
         {
             if (_watcher != null) _watcher.Stop();
-            try
-            {
-                if (_harmony != null) _harmony.UnpatchAll(HarmonyId);
-            }
-            catch (Exception ex)
-            {
-                ModLog.Error("卸载 Harmony 补丁失败：" + ex.Message);
-            }
+            try { if (_harmony != null) _harmony.UnpatchAll(HarmonyId); } catch { }
             if (!ReferenceEquals(_uiObject, null))
             {
                 UnityEngine.Object.Destroy(_uiObject);
                 _uiObject = null;
             }
-            ModLog.Info("模组已停用");
         }
 
-        /// <summary>
-        /// 模组设置页：显示在游戏「选项 → Mods」页签。
-        /// 游戏通过反射查找 OnSettingsUI(UIHelperBase) 方法（鸭子类型，天际线一代标准做法）。
-        /// 设置修改即时写入 XML 配置。
-        /// </summary>
         public void OnSettingsUI(UIHelperBase helper)
         {
             ScreenshotLinkerConfig.EnsureLoaded();
-            var cfg = ScreenshotLinkerConfig.Current;
+            _currentConfig = ScreenshotLinkerConfig.Current;
+            _currentHelper = helper;
+            var cfg = _currentConfig;
 
             helper.AddGroup("桌面端连接");
-            helper.AddTextfield(
-                "桌面端端口",
-                cfg.Port.ToString(),
-                text => { },
-                text =>
-                {
-                    int v;
-                    if (int.TryParse(text, out v) && v > 0 && v < 65536)
-                    {
-                        cfg.Port = v;
-                        cfg.Save();
-                        ModLog.Info("端口已更新为 " + v);
-                    }
-                    else
-                    {
-                        ModLog.Warn("端口无效：" + text);
-                    }
-                });
+            helper.AddTextfield("桌面端端口", cfg.Port.ToString(), OnPortTextChangedEmpty, OnPortTextSubmitted);
 
             helper.AddGroup("捕获通道");
-            helper.AddCheckbox("启用 Harmony 补丁（截图瞬间即时推送）", cfg.UseHarmonyPatch,
-                isChecked =>
-                {
-                    cfg.UseHarmonyPatch = isChecked;
-                    cfg.Save();
-                    ModLog.Info("Harmony 补丁通道 " + (isChecked ? "已开启" : "已关闭") + "（重启模组生效）");
-                });
-            helper.AddCheckbox("启用目录监听兜底（任何情况都能推送）", cfg.UseFolderWatch,
-                isChecked =>
-                {
-                    cfg.UseFolderWatch = isChecked;
-                    cfg.Save();
-                    ModLog.Info("目录监听通道 " + (isChecked ? "已开启" : "已关闭") + "（重启模组生效）");
-                });
+            helper.AddCheckbox("启用 Harmony 补丁", cfg.UseHarmonyPatch, OnHarmonyCheckChanged);
+            helper.AddCheckbox("启用目录监听兜底", cfg.UseFolderWatch, OnFolderWatchCheckChanged);
 
             helper.AddSpace(8);
 
-            // —— 一键启动配置 ——
             helper.AddGroup("一键启动（游戏界面按钮）");
-            helper.AddTextfield(
-                "桌面端程序路径",
-                cfg.GetDesktopAppPath(),
-                text => { },
-                text =>
-                {
-                    cfg.DesktopAppPath = text;
-                    cfg.Save();
-                    ModLog.Info("已更新桌面端程序路径：" + text);
-                });
-            helper.AddTextfield(
-                "游戏内按钮文字（最长 8 个字符）",
-                cfg.GetButtonText(),
-                text => { },
-                text =>
-                {
-                    if (!ReferenceEquals(text, null) && text.Length > ScreenshotLinkerConfig.ButtonTextMaxLength)
-                    {
-                        text = text.Substring(0, ScreenshotLinkerConfig.ButtonTextMaxLength);
-                        ModLog.Warn("按钮文字超过 " + ScreenshotLinkerConfig.ButtonTextMaxLength + " 字，已截断为：" + text);
-                    }
-                    cfg.ButtonText = text;
-                    cfg.Save();
-                });
+            helper.AddTextfield("程序路径 (若“浏览”无响应，请直接粘贴文件夹路径)", cfg.GetDesktopAppPath(), OnPathTextChangedEmpty, OnPathTextSubmitted);
+            helper.AddButton("浏览... 选择程序 (全屏下可能弹不出来)", OnBrowseButtonClicked);
+            helper.AddTextfield("游戏内按钮文字（最长 8 字符）", cfg.GetButtonText(), OnButtonTextChangedEmpty, OnButtonTextSubmitted);
 
-            // 不透明度数值：输入框（数值可见可改）；标题**红色**并实时显示当前值（滑块已按用户要求移除）
-            UILabel opacityTitle = null;
-            helper.AddTextfield(
-                "当前不透明度（%）",
-                cfg.GetOpacityPercent().ToString(),
-                text =>
-                {
-                    int v;
-                    if (int.TryParse(text, out v) && v >= 30 && v <= 100)
-                    {
-                        cfg.OpacityPercent = v;
-                        cfg.Save();
-                        ScreenshotLinkerUI.SetOpacity((float)v);
-                        if (!ReferenceEquals(opacityTitle, null))
-                        {
-                            try { opacityTitle.text = "当前不透明度（%）：" + v; } catch { }
-                        }
-                        ModLog.Info("按钮不透明度已设为 " + v + "%");
-                    }
-                    else
-                    {
-                        ModLog.Warn("不透明度无效（需 30-100）：" + text);
-                    }
-                },
-                text => { });
-
-            // 反射定位该输入框的标题 UILabel → 红色字体（游戏设置 API 无颜色接口；失败自动降级不影响功能）
             try
             {
                 UIComponent root = FindHelperRoot(helper);
                 if (!ReferenceEquals(root, null))
                 {
-                    opacityTitle = FindTitleLabel(root, "当前不透明度（%）");
-                    if (!ReferenceEquals(opacityTitle, null))
+                    UITextField pathTextField = FindTextFieldByTitle(root, "程序路径");
+                    if (!ReferenceEquals(pathTextField, null))
                     {
-                        opacityTitle.textColor = new Color32(239, 68, 68, 255); // 红色
+                        pathTextField.width = 600f;
+                        pathTextField.height = 26f;
+                        pathTextField.textScale = 0.8f;
+
+                        if (!ReferenceEquals(pathTextField.parent, null))
+                        {
+                            UIPanel parentPanel = pathTextField.parent as UIPanel;
+                            if (!ReferenceEquals(parentPanel, null))
+                            {
+                                parentPanel.width = 620f;
+                                parentPanel.autoLayout = false;
+                            }
+                        }
                     }
                 }
             }
-            catch
-            {
-                opacityTitle = null;
-            }
+            catch (Exception ex) { ModLog.Warn("UI调整失败：" + ex.Message); }
 
             helper.AddSpace(8);
-            helper.AddButton("保存配置（重启模组生效）", () =>
-            {
-                cfg.Save();
-                ModLog.Info("已手动保存配置");
-            });
+            helper.AddButton("保存配置", OnSaveButtonClicked);
         }
 
-        /// <summary>启动桌面端截图收集器（游戏内按钮 / 设置页按钮共用）。</summary>
-        public static void LaunchDesktopApp()
+        private void OnPortTextChangedEmpty(string text) { }
+        private void OnPortTextSubmitted(string text)
         {
-            string path = ScreenshotLinkerConfig.Current.GetDesktopAppPath();
-            if (!System.IO.File.Exists(path))
-            {
-                ModLog.Warn("桌面端程序不存在：" + path);
-                return;
-            }
+            int v;
+            if (int.TryParse(text, out v) && v > 0 && v < 65536) { _currentConfig.Port = v; _currentConfig.Save(); }
+        }
+
+        private void OnHarmonyCheckChanged(bool isChecked)
+        {
+            _currentConfig.UseHarmonyPatch = isChecked; _currentConfig.Save();
+        }
+
+        private void OnFolderWatchCheckChanged(bool isChecked)
+        {
+            _currentConfig.UseFolderWatch = isChecked; _currentConfig.Save();
+        }
+
+        private void OnPathTextChangedEmpty(string text) { }
+        private void OnPathTextSubmitted(string text)
+        {
+            if (!string.IsNullOrEmpty(text)) text = text.Trim().Trim('"', '\'');
+            _currentConfig.DesktopAppPath = text;
+            _currentConfig.Save();
+        }
+
+        private void OnBrowseButtonClicked()
+        {
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo();
-                psi.FileName = path;
-                psi.UseShellExecute = true; // 等价双击启动；桌面端自带单实例保护，不会多开
-                System.Diagnostics.Process.Start(psi);
-                ModLog.Info("已请求启动桌面端：" + path);
+                string selectedPath = ShowOpenFileDialog("选择 ScreenshotCollector.exe", "可执行文件 (*.exe)\0*.exe\0所有文件 (*.*)\0*.*\0");
+                if (!string.IsNullOrEmpty(selectedPath))
+                {
+                    _currentConfig.DesktopAppPath = selectedPath;
+                    _currentConfig.Save();
+
+                    UIComponent root = FindHelperRoot(_currentHelper);
+                    if (!ReferenceEquals(root, null))
+                    {
+                        UITextField pathField = FindTextFieldByTitle(root, "程序路径");
+                        if (!ReferenceEquals(pathField, null)) pathField.text = selectedPath;
+                    }
+                }
             }
             catch (Exception ex)
             {
-                ModLog.Warn("启动桌面端失败：" + ex.Message);
+                ModLog.Error("打开文件选择框失败：" + ex.Message);
             }
         }
 
-        /// <summary>
-        /// 反射探测游戏截图管理器并补丁其截图方法。
-        /// 找不到类型/方法时不抛异常、直接降级（目录监听仍可推送）。
-        /// </summary>
+        private void OnButtonTextChangedEmpty(string text) { }
+        private void OnButtonTextSubmitted(string text)
+        {
+            if (!ReferenceEquals(text, null) && text.Length > ScreenshotLinkerConfig.ButtonTextMaxLength)
+                text = text.Substring(0, ScreenshotLinkerConfig.ButtonTextMaxLength);
+            _currentConfig.ButtonText = text;
+            _currentConfig.Save();
+        }
+
+        private void OnSaveButtonClicked()
+        {
+            _currentConfig.Save();
+        }
+
+        public static void LaunchDesktopApp()
+        {
+            string path = ScreenshotLinkerConfig.Current.GetDesktopAppPath();
+            if (!string.IsNullOrEmpty(path)) path = path.Trim().Trim('"', '\'');
+
+            if (Directory.Exists(path))
+            {
+                string autoExe = PathUtil.Join(path, "ScreenshotCollector.exe");
+                if (File.Exists(autoExe)) path = autoExe;
+            }
+            else if (!path.ToLower().EndsWith(".exe") && File.Exists(path + ".exe"))
+            {
+                path += ".exe";
+            }
+
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            {
+                ModLog.Error("启动失败：路径错误 -> " + path);
+                return;
+            }
+
+            try
+            {
+                string exeDir = PathUtil.DirName(path);
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = "/c start \"\" \"" + path + "\"",
+                    WorkingDirectory = exeDir,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                System.Diagnostics.Process.Start(psi);
+                ModLog.Info("已成功发送启动指令：" + path);
+            }
+            catch (Exception ex)
+            {
+                ModLog.Error("启动异常：" + ex.Message);
+            }
+        }
+
         private bool TryPatchScreenshot()
         {
             try
             {
                 _harmony = new Harmony(HarmonyId);
-
-                // 游戏截图管理器（天际线一代：Game.ScreenshotManager，程序集 Assembly-CSharp）
-                // 注意：游戏 Mono 环境为 .NET 3.5 API surface，`type == null` 会触发
-                // Type.op_Equality（.NET 4.0 才存在）→ MissingMethodException，必须用引用比较
                 var type = Type.GetType("Game.ScreenshotManager, Assembly-CSharp");
-                if (ReferenceEquals(type, null))
-                {
-                    ModLog.Info("未找到 Game.ScreenshotManager，跳过 Harmony 补丁");
-                    return false;
-                }
-
+                if (ReferenceEquals(type, null)) return false;
                 var method = type.GetMethod("TakeScreenshot");
-                if (ReferenceEquals(method, null))
-                {
-                    ModLog.Info("未找到 TakeScreenshot 方法，跳过 Harmony 补丁");
-                    return false;
-                }
-
-                _harmony.Patch(method,
-                    postfix: new HarmonyMethod(typeof(Patches.ScreenshotPatch), nameof(Patches.ScreenshotPatch.Postfix)));
-                ModLog.Info("Harmony 补丁成功：" + type.FullName + ".TakeScreenshot");
+                if (ReferenceEquals(method, null)) return false;
+                _harmony.Patch(method, postfix: new HarmonyMethod(typeof(Patches.ScreenshotPatch), nameof(Patches.ScreenshotPatch.Postfix)));
                 return true;
             }
-            catch (Exception ex)
-            {
-                ModLog.Error("Harmony 补丁失败（降级目录监听）：" + ex.Message);
-                return false;
-            }
+            catch { return false; }
         }
 
-        /// <summary>
-        /// 反射取出设置面板的根容器（UIComponent）。
-        /// 游戏设置 API（UIHelperBase）不暴露容器句柄，这里通过反射找实现类里类型为 UIComponent 的字段。
-        /// 兼容 Mono .NET 3.5：GetFields/GetValue/IsAssignableFrom 均为 .NET 1.x API。
-        /// </summary>
         private static UIComponent FindHelperRoot(UIHelperBase helper)
         {
             try
@@ -316,27 +266,64 @@ namespace CitiesSkylines.ScreenshotLinker
                     }
                 }
             }
-            catch
-            {
-            }
+            catch { }
             return null;
         }
 
-        /// <summary>在容器子控件里找指定文本的 UILabel（前缀匹配，兼容标题被更新过的情况）</summary>
-        private static UILabel FindTitleLabel(UIComponent root, string text)
+        private static UITextField FindTextFieldByTitle(UIComponent root, string titleText)
         {
             try
             {
-                System.Collections.Generic.IList<UIComponent> comps = root.components; // 该版本子控件列表
+                System.Collections.Generic.IList<UIComponent> comps = root.components;
                 for (int i = 0; i < comps.Count; i++)
                 {
-                    UILabel l = comps[i] as UILabel;
-                    if (!ReferenceEquals(l, null) && l.text.StartsWith(text)) return l;
+                    UIComponent comp = comps[i];
+                    if (comp is UITextField && comp.name.Contains("Textfield"))
+                    {
+                        return comp as UITextField;
+                    }
+                    UITextField childField = FindTextFieldByTitle(comp, titleText);
+                    if (!ReferenceEquals(childField, null)) return childField;
                 }
             }
-            catch
-            {
-            }
+            catch { }
+            return null;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public class OpenFileName
+        {
+            public int structSize = 0; public IntPtr dlgOwner = IntPtr.Zero; public IntPtr instance = IntPtr.Zero;
+            public String filter = null; public String customFilter = null; public int maxCustFilter = 0;
+            public int filterIndex = 0; public String file = null; public int maxFile = 0;
+            public String fileTitle = null; public int maxFileTitle = 0; public String initialDir = null;
+            public String title = null; public int flags = 0; public short fileOffset = 0;
+            public short fileExtension = 0; public String defExt = null; public IntPtr custData = IntPtr.Zero;
+            public IntPtr hook = IntPtr.Zero; public String templateName = null; public IntPtr reservedPtr = IntPtr.Zero;
+            public int reservedInt = 0; public int flagsEx = 0;
+        }
+
+        [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        public static extern bool GetOpenFileName([In, Out] OpenFileName ofn);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
+
+        public static string ShowOpenFileDialog(string title, string filter)
+        {
+            OpenFileName ofn = new OpenFileName();
+            ofn.structSize = Marshal.SizeOf(ofn);
+            ofn.filter = filter;
+            ofn.file = new string(new char[256]);
+            ofn.maxFile = ofn.file.Length;
+            ofn.fileTitle = new string(new char[64]);
+            ofn.maxFileTitle = ofn.fileTitle.Length;
+            ofn.initialDir = "D:\\";
+            ofn.title = title;
+            ofn.dlgOwner = GetForegroundWindow();
+            ofn.flags = 0x00080000 | 0x00001000 | 0x00000800 | 0x00000008;
+
+            if (GetOpenFileName(ofn)) return ofn.file;
             return null;
         }
     }

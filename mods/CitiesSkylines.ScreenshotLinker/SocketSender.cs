@@ -7,19 +7,13 @@ namespace CitiesSkylines.ScreenshotLinker
 {
     /// <summary>
     /// 向桌面端「截图自动收集器」推送截图信息（TCP 127.0.0.1:23333）。
-    /// 协议：一行 JSON（与桌面端 SocketGameService 完全一致）：
-    ///   {"path":"D:\\...\\1.png","category":"天际线","time":"2026-10-23T12:00:00"}
-    /// category 取值：天际线 / 编辑器快照
     /// </summary>
     public static class SocketSender
     {
-        /// <summary>默认端口（模组启用时按配置覆盖）</summary>
         public const int DefaultPort = 23333;
-
-        /// <summary>实际使用的端口（Mod.OnEnabled 从配置读取）</summary>
         public static int Port = DefaultPort;
 
-        /// <summary>发送成功返回 true；桌面端未启动 / 网络异常返回 false（不抛异常）</summary>
+        /// <summary>发送成功返回 true</summary>
         public static bool Send(string path, string category, string timeText)
         {
             try
@@ -28,32 +22,50 @@ namespace CitiesSkylines.ScreenshotLinker
                               "\",\"category\":\"" + Escape(category) +
                               "\",\"time\":\"" + Escape(timeText) + "\"}";
 
-                using (var client = new TcpClient())
-                {
-                    // 2 秒连接超时，避免阻塞游戏；
-                    // 用 BeginConnect/EndConnect（.NET 2.0 API）而非 ConnectAsync（.NET 4.5），
-                    // 兼容游戏 Mono 的 .NET 3.5 API surface
-                    var result = client.BeginConnect("127.0.0.1", Port, null, null);
-                    if (!result.AsyncWaitHandle.WaitOne(2000))
-                    {
-                        client.Close();
-                        return false;
-                    }
-                    client.EndConnect(result);
-
-                    using (var stream = client.GetStream())
-                    {
-                        byte[] data = Encoding.UTF8.GetBytes(json + "\n");
-                        stream.Write(data, 0, data.Length);
-                        stream.Flush();
-                    }
-                }
-                return true;
+                return SendData(json);
             }
             catch
             {
                 return false;
             }
+        }
+
+        /// <summary>发送心跳包（模组启动时调用，通知桌面端已连接）</summary>
+        public static bool SendHeartbeat()
+        {
+            try
+            {
+                // category 设为 "心跳"，桌面端会识别此标记并只更新状态灯，不处理图片
+                string json = "{\"path\":\"__heartbeat__\",\"category\":\"心跳\",\"time\":\"" +
+                              DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss") + "\"}";
+                return SendData(json);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool SendData(string json)
+        {
+            using (var client = new TcpClient())
+            {
+                var result = client.BeginConnect("127.0.0.1", Port, null, null);
+                if (!result.AsyncWaitHandle.WaitOne(2000))
+                {
+                    client.Close();
+                    return false;
+                }
+                client.EndConnect(result);
+
+                using (var stream = client.GetStream())
+                {
+                    byte[] data = Encoding.UTF8.GetBytes(json + "\n");
+                    stream.Write(data, 0, data.Length);
+                    stream.Flush();
+                }
+            }
+            return true;
         }
 
         private static string Escape(string s)

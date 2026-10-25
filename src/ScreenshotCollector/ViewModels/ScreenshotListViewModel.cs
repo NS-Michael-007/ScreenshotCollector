@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -119,6 +121,36 @@ public partial class ScreenshotListViewModel : BaseViewModel
         OnPropertyChanged(nameof(IsEmpty));
     }
 
+    /// <summary>
+    /// 新增一条真实截图记录（已归档到磁盘的图片）。
+    /// 所有捕获来源（游戏目录监听 / 微信QQ剪贴板 / 模组推送）归档成功后都走这里，
+    /// 确保列表里是真实文件路径，缩略图与右侧大图预览才能正常渲染。
+    /// </summary>
+    /// <param name="filePath">归档后的真实文件路径</param>
+    /// <param name="sourceLabel">来源分类（天际线 / 编辑器快照 / 微信 / QQ / 剪贴板…）</param>
+    /// <param name="captureTime">捕获时间</param>
+    /// <param name="sourcePath">来源原始路径（可为空）</param>
+    public void AddItem(string filePath, string sourceLabel, DateTime captureTime, string? sourcePath = null)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => AddItem(filePath, sourceLabel, captureTime, sourcePath));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)) return;
+
+        var item = new ScreenshotItem
+        {
+            FileName = Path.GetFileName(filePath),
+            FilePath = filePath,
+            SourcePath = sourcePath ?? string.Empty,
+            SourceLabel = sourceLabel,
+            CaptureTime = captureTime
+        };
+        Add(item);
+    }
+
     /// <summary>按【来源 + 搜索词】过滤全部截图，重建四个时间分组</summary>
     private void RebuildGroups()
     {
@@ -126,7 +158,7 @@ public partial class ScreenshotListViewModel : BaseViewModel
 
         var text = (SearchText ?? string.Empty).Trim();
 
-        // 🚀【修复】强制按时间降序排列，保证最新的截图永远在最上面
+        // 强制按时间降序排列，保证最新的截图永远在最上面
         var filteredItems = AllItems.OrderByDescending(i => i.CaptureTime).ToList();
 
         foreach (var item in filteredItems)
@@ -147,7 +179,7 @@ public partial class ScreenshotListViewModel : BaseViewModel
                 if (!hit) continue;
             }
 
-            // 3. 按时间归组（🚀【修复】使用 Add 而不是 Insert(0)，因为已经是降序遍历）
+            // 3. 按时间归组（使用 Add 而不是 Insert(0)，因为已经是降序遍历）
             GroupOf(item.CaptureTime).Items.Add(item);
         }
 
@@ -274,7 +306,7 @@ public partial class ScreenshotListViewModel : BaseViewModel
     [RelayCommand]
     private void SelectAll()
     {
-        // 🚀【修复】获取当前界面上可见的所有图片（过滤后的），而不是底层的全部数据
+        // 获取当前界面上可见的所有图片（过滤后的），而不是底层的全部数据
         var visibleItems = Groups.SelectMany(g => g.Items).ToList();
         if (visibleItems.Count == 0) return;
 
@@ -291,7 +323,7 @@ public partial class ScreenshotListViewModel : BaseViewModel
     [RelayCommand]
     private void DeleteSelected()
     {
-        // 🚀 获取所有被勾选的项（全局查找，因为可能有些被勾选了但在其他分组）
+        // 获取所有被勾选的项（全局查找，因为可能有些被勾选了但在其他分组）
         var items = AllItems.Where(i => i.IsSelected).ToList();
         if (items.Count == 0)
         {
@@ -320,21 +352,15 @@ public partial class ScreenshotListViewModel : BaseViewModel
 
     // ---------- 分享：复制图片到剪贴板 + 唤起微信/QQ 聊天窗口 ----------
 
-    /// <summary>分享到微信：图片复制到剪贴板，唤起微信窗口，用户在聊天框 Ctrl+V 粘贴</summary>
+    /// <summary>分享到微信：图片复制到剪贴板，唤起微信窗口（未运行则自动启动），用户在聊天框 Ctrl+V 粘贴</summary>
     [RelayCommand]
-    private void ShareToWeChat()
-    {
-        ShareTo("WeChat", "Weixin", "微信");
-    }
+    private void ShareToWeChat() => ShareTo("微信");
 
-    /// <summary>分享到QQ：图片复制到剪贴板，唤起QQ窗口，用户在聊天框 Ctrl+V 粘贴</summary>
+    /// <summary>分享到QQ：图片复制到剪贴板，唤起QQ窗口（未运行则自动启动），用户在聊天框 Ctrl+V 粘贴</summary>
     [RelayCommand]
-    private void ShareToQQ()
-    {
-        ShareTo("QQ", "QQNT", "QQ");
-    }
+    private void ShareToQQ() => ShareTo("QQ");
 
-    private void ShareTo(string process1, string process2, string displayName)
+    private void ShareTo(string displayName)
     {
         if (SelectedItem == null || !File.Exists(SelectedItem.FilePath))
         {
@@ -348,15 +374,15 @@ public partial class ScreenshotListViewModel : BaseViewModel
             return;
         }
 
-        // 唤起对应聊天软件主窗口（新/旧进程名都试）
-        var activated = WindowActivator.Activate(process1) || WindowActivator.Activate(process2);
+        // 唤起聊天软件：未运行则自动启动，已运行则置前（并绕过 Windows 前台锁）
+        var activated = WindowActivator.EnsureForeground(displayName);
         if (activated)
         {
             LogService.Info("UI", $"已复制图片到剪贴板，正在唤起{displayName}…（在聊天框按 Ctrl+V 粘贴）");
         }
         else
         {
-            LogService.Warn("UI", $"图片已复制到剪贴板，但未找到{displayName}窗口（{displayName}未打开？）");
+            LogService.Warn("UI", $"图片已复制到剪贴板，但未能唤起{displayName}（请确认已安装并打开过）");
         }
     }
 }

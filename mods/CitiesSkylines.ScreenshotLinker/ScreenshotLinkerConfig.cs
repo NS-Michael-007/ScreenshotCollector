@@ -29,8 +29,14 @@ namespace CitiesSkylines.ScreenshotLinker
         /// <summary>游戏内按钮不透明度（0-100%，设置页滑块控制）</summary>
         public int OpacityPercent { get; set; }
 
-        /// <summary>桌面端程序默认路径（与桌面端工程构建输出一致）</summary>
+        /// <summary>桌面端程序默认路径（本地开发构建输出；玩家端路径不存在时自动回退到模组同目录打包工具）</summary>
         public const string DefaultDesktopAppPath = @"C:\Users\NAN SHENG CSUR\source\repos\ScreenshotCollector\src\ScreenshotCollector\bin\Debug\net8.0\ScreenshotCollector.exe";
+
+        /// <summary>随模组包分发的桌面端工具子文件夹名（对标 RoadBuilder 的 Thumbnail Maker 打包结构）</summary>
+        public const string BundledToolFolder = "ScreenshotCollectorTool";
+
+        /// <summary>随模组包分发的桌面端工具可执行文件名</summary>
+        public const string BundledToolFileName = "ScreenshotCollector.exe";
 
         /// <summary>游戏内按钮文字最大长度</summary>
         public const int ButtonTextMaxLength = 8;
@@ -48,11 +54,26 @@ namespace CitiesSkylines.ScreenshotLinker
             OpacityPercent = 100;
         }
 
-        /// <summary>取桌面端程序路径：空则用默认路径</summary>
+        /// <summary>
+        /// 取桌面端程序路径：
+        /// 1) 优先使用配置/默认路径（开发者本机直接命中本地构建 exe）；
+        /// 2) 若该路径不存在（玩家端工坊订阅后默认值指向本地开发目录，必然不存在），
+        ///    自动回退到「模组 DLL 同目录 \ ScreenshotCollectorTool \ ScreenshotCollector.exe」
+        ///    ——即随工坊包分发的独立工具，保证玩家游戏内按钮可直接启动，对标 RoadBuilder。
+        /// </summary>
         public string GetDesktopAppPath()
         {
             string p = DesktopAppPath;
-            if (ReferenceEquals(p, null) || p.Length == 0) return DefaultDesktopAppPath;
+            if (ReferenceEquals(p, null) || p.Length == 0) p = DefaultDesktopAppPath;
+            if (!System.IO.File.Exists(p))
+            {
+                string modDir = PathUtil.ModDirectory();
+                if (modDir.Length > 0)
+                {
+                    string bundled = PathUtil.Join(PathUtil.Join(modDir, BundledToolFolder), BundledToolFileName);
+                    if (System.IO.File.Exists(bundled)) return bundled;
+                }
+            }
             return p;
         }
 
